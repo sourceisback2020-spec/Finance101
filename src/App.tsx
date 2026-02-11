@@ -121,7 +121,7 @@ function App() {
       authEmail={hostedUser?.email}
       onSignOut={hostedAuthEnabled ? () => void onSignOut() : undefined}
     >
-      <AiCommandBox />
+      {view === "dashboard" ? <AiCommandBox /> : null}
       {view === "dashboard" && <DashboardView />}
       {view === "transactions" && <TransactionsView />}
       {view === "subscriptions" && <SubscriptionsView />}
