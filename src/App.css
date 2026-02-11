@@ -198,6 +198,10 @@
   z-index: 2;
 }
 
+.sidebar-mobile-head {
+  display: block;
+}
+
 .sidebar h1 {
   margin: 0;
   font-size: 20px;
@@ -214,6 +218,13 @@
   color: var(--muted);
   font-size: 12px;
   word-break: break-word;
+}
+
+.sidebar-close-btn,
+.mobile-topbar,
+.mobile-menu-btn,
+.sidebar-overlay {
+  display: none;
 }
 
 .nav-item {
@@ -727,18 +738,40 @@ tr.row-debit td {
 
 @media (max-width: 1080px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    display: block;
   }
 
   .sidebar {
-    position: sticky;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(84vw, 320px);
+    transform: translateX(-102%);
+    transition: transform 220ms ease;
     top: 0;
-    z-index: 5;
-    padding: 14px 12px;
+    z-index: 10;
+    padding: 14px 12px 18px;
     gap: 10px;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
     background: color-mix(in srgb, var(--sidebar) 90%, black);
+  }
+
+  .app-shell.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-mobile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .sidebar-close-btn {
+    display: inline-flex;
+    padding: 6px 10px;
+    font-size: 12px;
   }
 
   .sidebar h1 {
@@ -755,26 +788,13 @@ tr.row-debit td {
   }
 
   .sidebar nav {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: thin;
-  }
-
-  .sidebar nav::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .sidebar nav::-webkit-scrollbar-thumb {
-    background: color-mix(in srgb, var(--border) 70%, transparent);
-    border-radius: 999px;
+    display: block;
   }
 
   .nav-item {
-    flex: 0 0 auto;
-    margin-bottom: 0;
-    white-space: nowrap;
+    width: 100%;
+    margin-bottom: 8px;
+    white-space: normal;
     padding: 8px 10px;
     font-size: 13px;
     border-radius: 10px;
@@ -786,12 +806,50 @@ tr.row-debit td {
     width: 100%;
   }
 
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+    z-index: 9;
+  }
+
+  .sidebar-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .content {
-    padding: 14px;
+    padding: 12px;
+  }
+
+  .mobile-topbar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    align-items: center;
+    gap: 10px;
+    margin: -2px -2px 10px;
+    padding: 8px 2px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 94%, transparent), transparent);
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 74px;
+    padding: 8px 10px;
+    font-size: 13px;
   }
 
   .kpi-grid {
-    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
 
@@ -814,7 +872,7 @@ tr.row-debit td {
   }
 
   .row-actions button {
-    flex: 1 1 140px;
+    flex: 1 1 120px;
   }
 
   .chart-grid {
@@ -836,34 +894,61 @@ tr.row-debit td {
     font-size: 13px;
     padding: 8px;
   }
+
+  .table-wrap {
+    margin: 0 -4px;
+    padding: 0 4px;
+  }
 }
 
 @media (max-width: 640px) {
   .sidebar {
-    padding: 10px;
+    width: min(92vw, 340px);
+    padding: 12px 10px 16px;
   }
 
-  .sidebar h1 {
-    font-size: 16px;
-  }
-
-  .sidebar-subtitle {
+  .sidebar-subtitle,
+  .sidebar-auth {
     display: none;
   }
 
-  .sidebar-auth {
-    font-size: 11px;
+  .sidebar h1 {
+    font-size: 17px;
   }
 
   .content {
     padding: 10px;
   }
 
+  .mobile-topbar {
+    margin-bottom: 8px;
+  }
+
+  .mobile-topbar strong {
+    font-size: 14px;
+  }
+
   .panel {
     padding: 12px;
   }
 
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
   .kpi-card strong {
+    font-size: 18px;
+  }
+
+  .kpi-card h3 {
+    font-size: 12px;
+  }
+
+  h2 {
+    font-size: 22px;
+  }
+
+  h3 {
     font-size: 18px;
   }
 

@@ -1,5 +1,5 @@
 import { BarChart3, CreditCard, DollarSign, Landmark, Palette, PiggyBank, Repeat, Sparkles } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 type AppView = "dashboard" | "transactions" | "subscriptions" | "cards" | "banks" | "scenarios" | "retirement" | "customize";
 
@@ -26,10 +26,23 @@ const nav = [
 ] as const;
 
 export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onImportBackup, authEmail, onSignOut, children }: Props) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const viewLabel = useMemo(() => nav.find((item) => item.id === view)?.label ?? "Dashboard", [view]);
+
+  const handleChangeView = (nextView: AppView) => {
+    onChangeView(nextView);
+    setSidebarOpen(false);
+  };
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <h1>Local Finance Planner</h1>
+    <div className={`app-shell ${sidebarOpen ? "sidebar-open" : ""}`}>
+      <aside className="sidebar" aria-hidden={!sidebarOpen ? undefined : false}>
+        <div className="sidebar-mobile-head">
+          <h1>Local Finance Planner</h1>
+          <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
+            Close
+          </button>
+        </div>
         <p className="sidebar-subtitle">A clean desktop hub for your money decisions.</p>
         {authEmail ? <p className="sidebar-auth">{authEmail}</p> : null}
         <nav>
@@ -39,7 +52,7 @@ export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onI
               <button
                 key={item.id}
                 className={`nav-item ${view === item.id ? "active" : ""}`}
-                onClick={() => onChangeView(item.id)}
+                onClick={() => handleChangeView(item.id)}
               >
                 <Icon size={16} />
                 <span>{item.label}</span>
@@ -62,7 +75,16 @@ export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onI
           </button>
         ) : null}
       </aside>
-      <main className="content">{children}</main>
+      <button className={`sidebar-overlay ${sidebarOpen ? "visible" : ""}`} onClick={() => setSidebarOpen(false)} aria-label="Close menu overlay" />
+      <main className="content">
+        <div className="mobile-topbar">
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen((open) => !open)} aria-label="Open menu">
+            Menu
+          </button>
+          <strong>{viewLabel}</strong>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }
