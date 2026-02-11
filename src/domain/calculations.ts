@@ -11,10 +11,13 @@ export function isPostedTransaction(transaction: Transaction, asOf = localIsoDat
   return transaction.date <= asOf;
 }
 
+export function postedTransactionsAsOf(transactions: Transaction[], asOf = localIsoDate()) {
+  return transactions.filter((tx) => isPostedTransaction(tx, asOf));
+}
+
 export function transactionDeltaByAccount(transactions: Transaction[], asOf = localIsoDate()) {
   const map = new Map<string, number>();
-  transactions
-    .filter((tx) => isPostedTransaction(tx, asOf))
+  postedTransactionsAsOf(transactions, asOf)
     .forEach((tx) => {
       const delta = tx.type === "income" ? tx.amount : -tx.amount;
       map.set(tx.account, (map.get(tx.account) ?? 0) + delta);
@@ -57,7 +60,7 @@ export function calculateDashboardMetrics(
   retirementEntries: RetirementEntry[],
   bankAccounts: BankAccount[]
 ): DashboardMetrics {
-  const postedTransactions = transactions.filter((tx) => isPostedTransaction(tx));
+  const postedTransactions = postedTransactionsAsOf(transactions);
   const accountDeltas = transactionDeltaByAccount(transactions);
   const income = postedTransactions.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
   const expenses = postedTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);

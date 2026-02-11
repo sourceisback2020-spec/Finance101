@@ -5,6 +5,7 @@ import {
   calculateDashboardMetrics,
   cashflowSeries,
   evaluateScenario,
+  postedTransactionsAsOf,
   localIsoDate,
   scenarioImpactTransactions
 } from "../domain/calculations";
@@ -184,9 +185,11 @@ export function useDashboardData() {
   const scenarios = useFinanceStore((state) => state.scenarios);
   const cards = useFinanceStore((state) => state.cards);
   const metrics = useFinanceStore((state) => state.metrics);
+  const today = localIsoDate();
+  const postedTransactions = postedTransactionsAsOf(transactions, today);
   return {
-    categorySpend: byCategory(transactions),
-    cashflow: cashflowSeries(transactions),
+    categorySpend: byCategory(postedTransactions),
+    cashflow: cashflowSeries(postedTransactions),
     scenarioOutcomes: scenarios.map((scenario) => ({
       name: scenario.name,
       ...evaluateScenario(scenario, metrics.netCashflow, metrics.monthlySubscriptions, cards)

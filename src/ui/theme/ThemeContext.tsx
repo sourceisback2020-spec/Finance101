@@ -104,22 +104,23 @@ const builtinPresets: SavedPreset[] = [
     }
   },
   {
-    id: "minimalist",
-    name: "Minimalist",
+    id: "minimal",
+    name: "Minimal",
     settings: {
       ...defaultAppearance,
-      primary: "#050505",
-      secondary: "#0d0d0d",
-      accent: "#2dd4ff",
-      fontFamily: "mono",
-      radius: 4,
+      primary: "#0c0f14",
+      secondary: "#151c26",
+      accent: "#73d0ff",
+      fontFamily: "sans",
+      radius: 8,
       style: "minimal",
       texture: "none",
-      density: "compact",
+      density: "comfortable",
       effects: {
         glassmorphism: false,
         noiseTexture: false,
         interactiveGlow: false,
+        ambientMotion: false,
         mouseTrailer: false,
         scrollReveal: false,
         glitchHeaders: false
