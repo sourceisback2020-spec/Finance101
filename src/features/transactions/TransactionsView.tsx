@@ -156,7 +156,7 @@ export function TransactionsView() {
   return (
     <section className="stack-lg">
       <header>
-        <h2>Income & Expenses</h2>
+        <h2>Transactions</h2>
         <p className="muted">Track every transaction, categorize spending, and import history from CSV.</p>
       </header>
 

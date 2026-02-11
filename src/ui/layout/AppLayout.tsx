@@ -16,7 +16,7 @@ type Props = {
 
 const nav = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-  { id: "transactions", label: "Income & Expenses", icon: DollarSign },
+  { id: "transactions", label: "Transactions", icon: DollarSign },
   { id: "subscriptions", label: "Subscriptions", icon: Repeat },
   { id: "cards", label: "Credit Cards", icon: CreditCard },
   { id: "banks", label: "Bank Accounts", icon: PiggyBank },
