@@ -2,10 +2,9 @@ import { createClient, type AuthChangeEvent, type Session, type User } from "@su
 
 const HOSTED_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/+$/, "") ?? "";
 const HOSTED_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
-const HOSTED_MODE = import.meta.env.VITE_DATA_PROVIDER === "hosted";
 
 const isBrowser = typeof window !== "undefined";
-const isHostedWeb = isBrowser && HOSTED_MODE && typeof window.financeApi === "undefined";
+const isHostedWeb = isBrowser && typeof window.financeApi === "undefined";
 
 const supabase =
   isHostedWeb && HOSTED_URL && HOSTED_ANON_KEY
