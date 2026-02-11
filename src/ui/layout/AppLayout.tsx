@@ -75,7 +75,9 @@ export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onI
           </button>
         ) : null}
       </aside>
-      <button className={`sidebar-overlay ${sidebarOpen ? "visible" : ""}`} onClick={() => setSidebarOpen(false)} aria-label="Close menu overlay" />
+      {sidebarOpen ? (
+        <button className="sidebar-overlay visible" onClick={() => setSidebarOpen(false)} aria-label="Close menu overlay" />
+      ) : null}
       <main className="content">
         <div className="mobile-topbar">
           <button className="mobile-menu-btn" onClick={() => setSidebarOpen((open) => !open)} aria-label="Open menu">

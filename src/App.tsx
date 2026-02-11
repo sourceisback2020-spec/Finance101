@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AuthView } from "./features/auth/AuthView";
+import { AiCommandBox } from "./features/ai/AiCommandBox";
 import { BanksView } from "./features/banks/BanksView";
 import { CreditCardsView } from "./features/creditCards/CreditCardsView";
 import { CustomizeView } from "./features/customize/CustomizeView";
@@ -120,6 +121,7 @@ function App() {
       authEmail={hostedUser?.email}
       onSignOut={hostedAuthEnabled ? () => void onSignOut() : undefined}
     >
+      <AiCommandBox />
       {view === "dashboard" && <DashboardView />}
       {view === "transactions" && <TransactionsView />}
       {view === "subscriptions" && <SubscriptionsView />}

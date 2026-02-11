@@ -503,6 +503,16 @@ select {
   padding: 8px 10px;
 }
 
+textarea {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--panel-soft) 74%, var(--bg));
+  color: var(--text);
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 104px;
+}
+
 button {
   border-radius: var(--radius-control);
   border: 1px solid var(--border);
@@ -707,6 +717,10 @@ tr.row-debit td {
   gap: 10px;
 }
 
+.ai-command-panel {
+  margin-bottom: 2px;
+}
+
 .switch-row {
   display: flex;
   align-items: center;
@@ -828,6 +842,7 @@ tr.row-debit td {
   .content {
     padding: 12px;
     overflow-x: clip;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
 
   .mobile-topbar {
