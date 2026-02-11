@@ -72,7 +72,7 @@
   min-height: 100vh;
   color: var(--text);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
   isolation: isolate;
   font-family: var(--font-family-ui);
   font-size: calc(16px * var(--font-scale));
@@ -209,6 +209,13 @@
   font-size: 13px;
 }
 
+.sidebar-auth {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
 .nav-item {
   width: 100%;
   display: flex;
@@ -247,6 +254,34 @@
   padding: var(--content-padding);
   position: relative;
   z-index: 2;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  backdrop-filter: blur(var(--panel-blur));
+}
+
+.auth-card h1 {
+  margin: 0;
+}
+
+.auth-error {
+  margin: 2px 0 0;
+  color: #ff8fa7;
 }
 
 .stack-lg {
@@ -695,8 +730,152 @@ tr.row-debit td {
     grid-template-columns: 1fr;
   }
 
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 14px 12px;
+    gap: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--sidebar) 90%, black);
+  }
+
+  .sidebar h1 {
+    font-size: 18px;
+  }
+
+  .sidebar-subtitle {
+    margin: 0;
+    font-size: 12px;
+  }
+
+  .sidebar-auth {
+    margin: 0;
+  }
+
+  .sidebar nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+
+  .sidebar nav::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .sidebar nav::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--border) 70%, transparent);
+    border-radius: 999px;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    white-space: nowrap;
+    padding: 8px 10px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+
+  .export-btn,
+  .secondary-btn {
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .content {
+    padding: 14px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 10px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .panel-head input {
+    width: 100%;
+  }
+
+  .row-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .row-actions button {
+    flex: 1 1 140px;
+  }
+
   .chart-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chart-toolbar {
+    justify-content: flex-start;
+  }
+
+  .chart-box {
+    min-height: 200px;
+    padding: 9px 10px 8px;
+  }
+
+  th,
+  td {
+    white-space: nowrap;
+    font-size: 13px;
+    padding: 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    padding: 10px;
+  }
+
+  .sidebar h1 {
+    font-size: 16px;
+  }
+
+  .sidebar-subtitle {
+    display: none;
+  }
+
+  .sidebar-auth {
+    font-size: 11px;
+  }
+
+  .content {
+    padding: 10px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .kpi-card strong {
+    font-size: 18px;
+  }
+
+  .chip-btn {
+    min-width: 62px;
+    padding: 6px 8px;
+  }
+
+  .chart-toolbar .chip-btn {
+    min-width: 48px;
+    padding: 4px 7px;
+    font-size: 10px;
   }
 }
 

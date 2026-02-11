@@ -9,6 +9,8 @@ type Props = {
   onExportCsv: () => void;
   onExportBackup: () => void;
   onImportBackup: () => void;
+  authEmail?: string | null;
+  onSignOut?: () => void;
   children: ReactNode;
 };
 
@@ -23,12 +25,13 @@ const nav = [
   { id: "customize", label: "Customize UI", icon: Palette }
 ] as const;
 
-export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onImportBackup, children }: Props) {
+export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onImportBackup, authEmail, onSignOut, children }: Props) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <h1>Local Finance Planner</h1>
         <p className="sidebar-subtitle">A clean desktop hub for your money decisions.</p>
+        {authEmail ? <p className="sidebar-auth">{authEmail}</p> : null}
         <nav>
           {nav.map((item) => {
             const Icon = item.icon;
@@ -53,6 +56,11 @@ export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onI
         <button className="secondary-btn" onClick={onExportCsv}>
           Export Transactions CSV
         </button>
+        {onSignOut ? (
+          <button className="secondary-btn" onClick={onSignOut}>
+            Sign Out
+          </button>
+        ) : null}
       </aside>
       <main className="content">{children}</main>
     </div>

@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { AuthView } from "./features/auth/AuthView";
 import { BanksView } from "./features/banks/BanksView";
 import { CreditCardsView } from "./features/creditCards/CreditCardsView";
 import { CustomizeView } from "./features/customize/CustomizeView";
@@ -7,6 +8,15 @@ import { RetirementView } from "./features/retirement401k/RetirementView";
 import { ScenariosView } from "./features/scenarios/ScenariosView";
 import { SubscriptionsView } from "./features/subscriptions/SubscriptionsView";
 import { TransactionsView } from "./features/transactions/TransactionsView";
+import type { HostedUser } from "./data/supabaseAuth";
+import {
+  getHostedUser,
+  isHostedAuthEnabled,
+  onHostedAuthStateChange,
+  signInHosted,
+  signOutHosted,
+  signUpHosted
+} from "./data/supabaseAuth";
 import { useFinanceStore } from "./state/store";
 import { AppLayout } from "./ui/layout/AppLayout";
 import "./App.css";
@@ -18,10 +28,56 @@ function App() {
   const exportCsv = useFinanceStore((state) => state.exportCsv);
   const exportBackup = useFinanceStore((state) => state.exportBackup);
   const importBackup = useFinanceStore((state) => state.importBackup);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [hostedUser, setHostedUser] = useState<HostedUser | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const hostedAuthEnabled = isHostedAuthEnabled();
 
   useEffect(() => {
+    if (!hostedAuthEnabled) {
+      setAuthLoading(false);
+      return;
+    }
+    void getHostedUser().then((user) => {
+      setHostedUser(user);
+      setAuthLoading(false);
+    });
+    const subscription = onHostedAuthStateChange((_event, session) => {
+      setHostedUser(session?.user ?? null);
+      setAuthError(null);
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [hostedAuthEnabled]);
+
+  useEffect(() => {
+    if (hostedAuthEnabled && !hostedUser) return;
     void refreshAll();
-  }, [refreshAll]);
+  }, [refreshAll, hostedAuthEnabled, hostedUser]);
+
+  const onSignIn = async (email: string, password: string) => {
+    const { error } = await signInHosted(email, password);
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+    setAuthError(null);
+  };
+
+  const onSignUp = async (email: string, password: string) => {
+    const { error } = await signUpHosted(email, password);
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+    setAuthError(null);
+  };
+
+  const onSignOut = async () => {
+    await signOutHosted();
+    setHostedUser(null);
+  };
 
   const onExportBackup = async () => {
     const ok = await exportBackup();
@@ -39,6 +95,21 @@ function App() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="auth-shell">
+        <section className="auth-card">
+          <h1>Loading...</h1>
+          <p className="muted">Checking secure session.</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (hostedAuthEnabled && !hostedUser) {
+    return <AuthView error={authError} onSignIn={onSignIn} onSignUp={onSignUp} />;
+  }
+
   return (
     <AppLayout
       view={view}
@@ -46,6 +117,8 @@ function App() {
       onExportCsv={() => void exportCsv()}
       onExportBackup={() => void onExportBackup()}
       onImportBackup={() => void onImportBackup()}
+      authEmail={hostedUser?.email}
+      onSignOut={hostedAuthEnabled ? () => void onSignOut() : undefined}
     >
       {view === "dashboard" && <DashboardView />}
       {view === "transactions" && <TransactionsView />}

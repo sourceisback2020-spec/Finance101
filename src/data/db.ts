@@ -1,4 +1,5 @@
 import type { BankAccount, CreditCard, FinanceBackup, RetirementEntry, Scenario, Subscription, Transaction, UiPreferences } from "../domain/models";
+import { getHostedAccessToken, getHostedUser } from "./supabaseAuth";
 
 function hasApi() {
   return typeof window !== "undefined" && typeof window.financeApi !== "undefined";
@@ -16,7 +17,7 @@ const BACKUP_VERSION = 1;
 const APPEARANCE_KEY = "appearance.engine.v1";
 const APPEARANCE_PRESET_KEY = "appearance.engine.presets.v1";
 const HOSTED_TABLE = import.meta.env.VITE_HOSTED_TABLE ?? "finance_records";
-const HOSTED_OWNER_ID = import.meta.env.VITE_HOSTED_OWNER_ID ?? "solo-user";
+const HOSTED_OWNER_ID_FALLBACK = import.meta.env.VITE_HOSTED_OWNER_ID ?? "solo-user";
 const HOSTED_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/+$/, "") ?? "";
 const HOSTED_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const HOSTED_MODE = import.meta.env.VITE_DATA_PROVIDER === "hosted";
@@ -27,10 +28,17 @@ function hasHostedApi() {
   return HOSTED_MODE || !hasApi();
 }
 
-function hostedHeaders(withJson = false) {
+async function hostedOwnerId() {
+  const user = await getHostedUser();
+  if (user?.id) return user.id;
+  return HOSTED_OWNER_ID_FALLBACK;
+}
+
+async function hostedHeaders(withJson = false) {
+  const token = await getHostedAccessToken();
   const headers: Record<string, string> = {
     apikey: HOSTED_ANON_KEY,
-    Authorization: `Bearer ${HOSTED_ANON_KEY}`
+    Authorization: `Bearer ${token ?? HOSTED_ANON_KEY}`
   };
   if (withJson) {
     headers["Content-Type"] = "application/json";
@@ -48,29 +56,31 @@ async function hostedFetch(path: string, init?: RequestInit) {
 }
 
 async function hostedList<T>(collection: string) {
+  const ownerId = await hostedOwnerId();
   const params = new URLSearchParams();
-  params.set("owner_id", `eq.${HOSTED_OWNER_ID}`);
+  params.set("owner_id", `eq.${ownerId}`);
   params.set("collection", `eq.${collection}`);
   params.set("select", "data");
   params.set("order", "updated_at.desc");
   const response = await hostedFetch(`?${params.toString()}`, {
     method: "GET",
-    headers: hostedHeaders()
+    headers: await hostedHeaders()
   });
   const rows = (await response.json()) as Array<{ data: T }>;
   return rows.map((row) => row.data);
 }
 
 async function hostedUpsert<T extends { id: string }>(collection: string, item: T) {
+  const ownerId = await hostedOwnerId();
   await hostedFetch("?on_conflict=owner_id,collection,id", {
     method: "POST",
     headers: {
-      ...hostedHeaders(true),
+      ...(await hostedHeaders(true)),
       Prefer: "resolution=merge-duplicates,return=minimal"
     },
     body: JSON.stringify([
       {
-        owner_id: HOSTED_OWNER_ID,
+        owner_id: ownerId,
         collection,
         id: item.id,
         data: item
@@ -82,15 +92,16 @@ async function hostedUpsert<T extends { id: string }>(collection: string, item: 
 
 async function hostedBulkUpsert<T extends { id: string }>(collection: string, items: T[]) {
   if (items.length === 0) return true;
+  const ownerId = await hostedOwnerId();
   await hostedFetch("?on_conflict=owner_id,collection,id", {
     method: "POST",
     headers: {
-      ...hostedHeaders(true),
+      ...(await hostedHeaders(true)),
       Prefer: "resolution=merge-duplicates,return=minimal"
     },
     body: JSON.stringify(
       items.map((item) => ({
-        owner_id: HOSTED_OWNER_ID,
+        owner_id: ownerId,
         collection,
         id: item.id,
         data: item
@@ -101,13 +112,14 @@ async function hostedBulkUpsert<T extends { id: string }>(collection: string, it
 }
 
 async function hostedDelete(collection: string, id: string) {
+  const ownerId = await hostedOwnerId();
   const params = new URLSearchParams();
-  params.set("owner_id", `eq.${HOSTED_OWNER_ID}`);
+  params.set("owner_id", `eq.${ownerId}`);
   params.set("collection", `eq.${collection}`);
   params.set("id", `eq.${id}`);
   await hostedFetch(`?${params.toString()}`, {
     method: "DELETE",
-    headers: hostedHeaders()
+    headers: await hostedHeaders()
   });
   return true;
 }
@@ -536,12 +548,12 @@ export const db = {
         await hostedFetch("?on_conflict=owner_id,collection,id", {
           method: "POST",
           headers: {
-            ...hostedHeaders(true),
+            ...(await hostedHeaders(true)),
             Prefer: "resolution=merge-duplicates,return=minimal"
           },
           body: JSON.stringify([
             {
-              owner_id: HOSTED_OWNER_ID,
+              owner_id: await hostedOwnerId(),
               collection: "settings",
               id: "ui-preferences",
               data: prefs
