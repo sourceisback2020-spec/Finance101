@@ -24,6 +24,10 @@ const STOP_WORDS = [
   "due", "cost", "frequency", "amount", "months", "duration", "payment", "schedule", "employee", "match", "return"
 ];
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseAmount(input: string) {
   const moneyMatch = input.match(/\$(-?\d+(?:\.\d{1,2})?)/);
   if (moneyMatch) return Math.abs(Number(moneyMatch[1]));
@@ -79,7 +83,7 @@ function parseWordByKey(input: string, keys: string[]) {
 
 function parseField(input: string, names: string[]) {
   for (const name of names) {
-    const pattern = new RegExp(`${name}\\s+(.+?)(?=\\s(?:${STOP_WORDS.join("|")}|$))`, "i");
+    const pattern = new RegExp(`\\b${escapeRegExp(name)}\\b\\s+(.+?)(?=(?:\\s(?:${STOP_WORDS.join("|")})\\b|$))`, "i");
     const match = input.match(pattern);
     if (match?.[1]) return match[1].trim();
   }
@@ -96,10 +100,11 @@ function extractEntityName(input: string, entityWord: string) {
 }
 
 function fuzzyFind<T>(items: T[], text: string, selector: (item: T) => string) {
-  const needle = text.trim().toLowerCase();
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  const needle = normalize(text);
   if (!needle) return null;
   return items.find((item) => {
-    const hay = selector(item).toLowerCase();
+    const hay = normalize(selector(item));
     return hay.includes(needle) || needle.includes(hay);
   }) ?? null;
 }
@@ -236,7 +241,7 @@ function parseSimpleTransactionCommand(input: string, context: ParseContext) {
 function parseBankCommand(input: string, context: ParseContext) {
   if (!/^\s*bank\b/i.test(input)) return null;
   const action = /\b(delete|remove)\b/i.test(input) ? "delete" : /\b(add|create|new)\b/i.test(input) ? "add" : "update";
-  const name = parseField(input, ["bank", "account"]) || extractEntityName(input, "bank");
+  const name = extractEntityName(input, "bank") || parseField(input, ["bank", "account"]);
   const existing = fuzzyFind(context.banks, name, (item) => `${item.institution} ${item.nickname} ${item.id}`);
   if (action === "delete") {
     if (!existing) return { error: `Could not find bank account "${name}" to delete.` };
@@ -271,7 +276,7 @@ function parseBankCommand(input: string, context: ParseContext) {
 function parseCardCommand(input: string, context: ParseContext) {
   if (!/^\s*(card|credit card)\b/i.test(input)) return null;
   const action = /\b(delete|remove)\b/i.test(input) ? "delete" : /\b(add|create|new)\b/i.test(input) ? "add" : "update";
-  const name = parseField(input, ["card", "credit card"]) || extractEntityName(input, "card");
+  const name = extractEntityName(input, "card") || parseField(input, ["card", "credit card"]);
   const existing = fuzzyFind(context.cards, name, (item) => `${item.name} ${item.id}`);
   if (action === "delete") {
     if (!existing) return { error: `Could not find card "${name}" to delete.` };
@@ -303,7 +308,7 @@ function parseCardCommand(input: string, context: ParseContext) {
 function parseSubscriptionCommand(input: string, context: ParseContext) {
   if (!/^\s*(subscription|sub)\b/i.test(input)) return null;
   const action = /\b(delete|remove)\b/i.test(input) ? "delete" : /\b(add|create|new)\b/i.test(input) ? "add" : "update";
-  const name = parseField(input, ["subscription", "sub"]) || extractEntityName(input, "subscription");
+  const name = extractEntityName(input, "subscription") || parseField(input, ["subscription", "sub"]);
   const existing = fuzzyFind(context.subscriptions, name, (item) => `${item.name} ${item.id}`);
   if (action === "delete") {
     if (!existing) return { error: `Could not find subscription "${name}" to delete.` };
@@ -372,7 +377,7 @@ function parseImplicitSubscriptionCommand(input: string, context: ParseContext) 
 function parseScenarioCommand(input: string, context: ParseContext) {
   if (!/^\s*(scenario|what-if|what if)\b/i.test(input)) return null;
   const action = /\b(delete|remove)\b/i.test(input) ? "delete" : /\b(add|create|new)\b/i.test(input) ? "add" : "update";
-  const name = parseField(input, ["scenario", "what-if", "what if"]) || extractEntityName(input, "scenario");
+  const name = extractEntityName(input, "scenario") || parseField(input, ["scenario", "what-if", "what if"]);
   const existing = fuzzyFind(context.scenarios, name, (item) => `${item.name} ${item.id}`);
   if (action === "delete") {
     if (!existing) return { error: `Could not find scenario "${name}" to delete.` };

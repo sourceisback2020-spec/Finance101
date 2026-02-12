@@ -17,7 +17,17 @@ const banks: BankAccount[] = [
   }
 ];
 
-const cards: CreditCard[] = [];
+const cards: CreditCard[] = [
+  {
+    id: "card-discover",
+    name: "Discover",
+    balance: 0,
+    limitAmount: 5000,
+    apr: 24.99,
+    minPayment: 35,
+    dueDate: "2026-03-10"
+  }
+];
 const scenarios: Scenario[] = [];
 const retirementEntries: RetirementEntry[] = [];
 
@@ -38,6 +48,26 @@ describe("AI command parsing", () => {
     if ("actions" in result) {
       expect(result.actions).toHaveLength(1);
       expect(result.actions[0].label).toContain("32");
+    }
+  });
+
+  it("routes short 'charge to <card name>' command to the matching credit card account", async () => {
+    const upsertTransaction = vi.spyOn(db, "upsertTransaction").mockResolvedValue(true);
+    const result = parseActions("21.28 charge to discover", {
+      banks,
+      cards,
+      subscriptions: [],
+      scenarios,
+      retirementEntries
+    });
+    expect("actions" in result).toBe(true);
+    if ("actions" in result) {
+      expect(result.actions).toHaveLength(1);
+      await result.actions[0].run();
+      expect(upsertTransaction).toHaveBeenCalledTimes(1);
+      const payload = upsertTransaction.mock.calls[0][0];
+      expect(payload.account).toBe("card-discover");
+      expect(payload.amount).toBe(21.28);
     }
   });
 
