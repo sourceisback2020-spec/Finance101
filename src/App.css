@@ -724,7 +724,8 @@ tr.row-debit td {
 
 .ai-command-panel textarea {
   min-height: 88px;
-  resize: vertical;
+  overflow-y: hidden;
+  resize: none;
 }
 
 .switch-row {

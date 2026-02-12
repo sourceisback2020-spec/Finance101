@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { db } from "../../data/db";
 import { localIsoDate } from "../../domain/calculations";
 import type { BankAccount, CreditCard, RetirementEntry, Scenario, Subscription, Transaction } from "../../domain/models";
@@ -453,6 +453,7 @@ export function AiCommandBox() {
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const examples = useMemo(
     () => [
@@ -470,6 +471,13 @@ export function AiCommandBox() {
     []
   );
 
+  const autoResizeTextarea = () => {
+    const node = textareaRef.current;
+    if (!node) return;
+    node.style.height = "0px";
+    node.style.height = `${Math.max(76, node.scrollHeight)}px`;
+  };
+
   const applyCommands = async () => {
     const parsed = parseActions(input, { banks, cards, subscriptions, scenarios, retirementEntries });
     if (!("actions" in parsed)) {
@@ -483,6 +491,10 @@ export function AiCommandBox() {
       await refreshAll();
       setStatus(`Applied ${parsed.actions.length} change${parsed.actions.length === 1 ? "" : "s"}: ${parsed.actions.map((a) => a.label).join(" | ")}`);
       setInput("");
+      const node = textareaRef.current;
+      if (node) {
+        node.style.height = "76px";
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not apply command.");
     } finally {
@@ -499,7 +511,16 @@ export function AiCommandBox() {
       <p className="muted">Simple commands work: "$32 mcdonalds on chase", "netflix $15 monthly on 2026-03-01", "transfer $200 from checking to savings".</p>
       <label>
         Command Input
-        <textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder={examples[0]} />
+        <textarea
+          ref={textareaRef}
+          rows={2}
+          value={input}
+          onChange={(event) => {
+            setInput(event.target.value);
+            autoResizeTextarea();
+          }}
+          placeholder={examples[0]}
+        />
       </label>
       <div className="row-actions">
         <button type="button" onClick={() => void applyCommands()} disabled={busy || input.trim().length === 0}>{busy ? "Applying..." : "Apply Commands"}</button>
