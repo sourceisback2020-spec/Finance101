@@ -60,10 +60,13 @@ export function calculateDashboardMetrics(
   retirementEntries: RetirementEntry[],
   bankAccounts: BankAccount[]
 ): DashboardMetrics {
+  const cardIds = new Set(creditCards.map((card) => card.id));
   const postedTransactions = postedTransactionsAsOf(transactions);
+  // Cashflow metrics should represent cash movement, not new card debt.
+  const postedCashflowTransactions = postedTransactions.filter((tx) => !cardIds.has(tx.account));
   const accountDeltas = transactionDeltaByAccount(transactions);
-  const income = postedTransactions.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
-  const expenses = postedTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
+  const income = postedCashflowTransactions.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
+  const expenses = postedCashflowTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
   const retirementBalance = retirementEntries[0]?.balance ?? 0;
   return {
     income,

@@ -37,6 +37,17 @@ describe("finance calculations", () => {
         account: "b1",
         note: "",
         recurring: 0
+      },
+      {
+        id: "4",
+        date: "2026-01-03",
+        amount: 100,
+        type: "expense",
+        category: "Dining",
+        merchant: "Card Purchase",
+        account: "c1",
+        note: "",
+        recurring: 0
       }
     ];
     const subs: Subscription[] = [
@@ -75,6 +86,7 @@ describe("finance calculations", () => {
     const metrics = calculateDashboardMetrics(tx, subs, cards, retirement, banks);
     expect(metrics.netCashflow).toBe(3800);
     expect(metrics.monthlySubscriptions).toBe(12);
+    expect(metrics.totalCreditBalance).toBe(500);
     expect(metrics.averageUtilizationPct).toBe(20);
     expect(metrics.bankCashPosition).toBe(7200);
   });

@@ -196,9 +196,11 @@ export function useDashboardData() {
   const metrics = useFinanceStore((state) => state.metrics);
   const today = localIsoDate();
   const postedTransactions = postedTransactionsAsOf(transactions, today);
+  const cardIds = new Set(cards.map((card) => card.id));
+  const postedCashflowTransactions = postedTransactions.filter((tx) => !cardIds.has(tx.account));
   return {
-    categorySpend: byCategory(postedTransactions),
-    cashflow: cashflowSeries(postedTransactions),
+    categorySpend: byCategory(postedCashflowTransactions),
+    cashflow: cashflowSeries(postedCashflowTransactions),
     scenarioOutcomes: scenarios.map((scenario) => ({
       name: scenario.name,
       ...evaluateScenario(scenario, metrics.netCashflow, metrics.monthlySubscriptions, cards)
