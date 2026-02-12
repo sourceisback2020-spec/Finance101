@@ -73,7 +73,7 @@
   min-height: 100dvh;
   color: var(--text);
   position: relative;
-  overflow-x: hidden;
+  overflow: clip;
   isolation: isolate;
   font-family: var(--font-family-ui);
   font-size: calc(16px * var(--font-scale));
@@ -83,7 +83,7 @@
 .app-shell::before {
   content: "";
   position: absolute;
-  inset: -10%;
+  inset: 0;
   background:
     radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--bg-grad-a) 45%, transparent), transparent 52%),
     radial-gradient(circle at 78% 28%, color-mix(in srgb, var(--bg-grad-b) 42%, transparent), transparent 49%),
@@ -97,7 +97,7 @@
 .app-shell::after {
   content: "";
   position: absolute;
-  inset: -5%;
+  inset: 0;
   background: transparent;
   z-index: 0;
   pointer-events: none;
@@ -615,6 +615,8 @@ button:hover {
 
 .table-wrap {
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -849,13 +851,14 @@ tr.row-debit td {
   .content {
     padding: 12px;
     overflow-x: clip;
+    overflow-y: visible;
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    -webkit-overflow-scrolling: touch;
   }
 
   .mobile-topbar {
     display: flex;
-    position: sticky;
-    top: 0;
+    position: static;
     z-index: 8;
     align-items: center;
     gap: 10px;

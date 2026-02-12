@@ -19,8 +19,19 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background: var(--bg, #070b18);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+html,
+body,
+#root {
+  width: 100%;
 }
