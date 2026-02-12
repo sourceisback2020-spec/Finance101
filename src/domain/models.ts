@@ -25,6 +25,8 @@ export type Subscription = {
   frequency: SubscriptionFrequency;
   nextDueDate: string;
   category: string;
+  accountId: string;
+  imageDataUrl: string;
   isActive: number;
 };
 
@@ -68,6 +70,7 @@ export type BankAccount = {
   availableBalance: number;
   apy: number;
   lastUpdated: string;
+  imageDataUrl: string;
 };
 
 export type UiPreferences = {

@@ -40,7 +40,17 @@ describe("finance calculations", () => {
       }
     ];
     const subs: Subscription[] = [
-      { id: "s1", name: "Music", cost: 12, frequency: "monthly", nextDueDate: "2026-02-01", category: "Entertainment", isActive: 1 }
+      {
+        id: "s1",
+        name: "Music",
+        cost: 12,
+        frequency: "monthly",
+        nextDueDate: "2026-02-01",
+        category: "Entertainment",
+        accountId: "b1",
+        imageDataUrl: "",
+        isActive: 1
+      }
     ];
     const cards: CreditCard[] = [
       { id: "c1", name: "Visa", balance: 400, limitAmount: 2000, apr: 21, minPayment: 25, dueDate: "2026-02-15" }
@@ -57,7 +67,8 @@ describe("finance calculations", () => {
         currentBalance: 3400,
         availableBalance: 3350,
         apy: 0.1,
-        lastUpdated: "2026-01-10"
+        lastUpdated: "2026-01-10",
+        imageDataUrl: ""
       }
     ];
 
@@ -83,7 +94,10 @@ describe("finance calculations", () => {
       purchaseAmount: 2400,
       durationMonths: 12,
       paymentType: "card",
-      createdAt: "2026-01-01"
+      createdAt: "2026-01-01",
+      accountId: "unassigned",
+      scheduleDate: "2026-01-02",
+      isApplied: 1
     };
     const result = evaluateScenario(scenario, 2000, 200, []);
     expect(result.monthlyScenarioCost).toBe(200);

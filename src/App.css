@@ -299,7 +299,7 @@
 .stack-lg {
   display: flex;
   flex-direction: column;
-  gap: var(--stack-gap, 18px);
+  gap: var(--stack-gap, 12px);
 }
 
 .muted {
@@ -308,26 +308,26 @@
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
 }
 
 .kpi-card {
   background: color-mix(in srgb, var(--panel) 86%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-panel);
-  padding: 14px;
+  padding: 10px 12px;
   backdrop-filter: blur(var(--panel-blur));
 }
 
 .kpi-card h3 {
   margin: 0 0 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .kpi-card strong {
-  font-size: 20px;
+  font-size: 17px;
 }
 
 .panel {
@@ -336,7 +336,7 @@
   border-radius: var(--radius-panel);
   padding: var(--panel-padding);
   backdrop-filter: blur(var(--panel-blur));
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--bg) 76%, transparent);
+  box-shadow: 0 5px 12px color-mix(in srgb, var(--bg) 76%, transparent);
   border-image: linear-gradient(120deg, color-mix(in srgb, var(--accent) 55%, var(--border)), var(--border), color-mix(in srgb, var(--accent) 35%, var(--border))) 1;
   /* Keep layout stable on mobile; content-visibility can cause jumpy scroll heights. */
   content-visibility: visible;
@@ -362,7 +362,7 @@
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text) 7%, transparent),
     0 1px 14px color-mix(in srgb, var(--bg) 26%, transparent);
-  min-height: 224px;
+  min-height: 190px;
 }
 
 .chart-toolbar {
@@ -718,7 +718,13 @@ tr.row-debit td {
 }
 
 .ai-command-panel {
-  margin-bottom: 2px;
+  margin-bottom: 0;
+  padding: 10px 12px;
+}
+
+.ai-command-panel textarea {
+  min-height: 88px;
+  resize: vertical;
 }
 
 .switch-row {
@@ -988,5 +994,43 @@ tr.row-debit td {
     padding: 4px 7px;
     font-size: 10px;
   }
+}
+
+.image-upload-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.image-upload-preview img {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.entity-with-image {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.entity-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.entity-thumb-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(94, 186, 255, 0.45), rgba(138, 104, 255, 0.45));
 }
 

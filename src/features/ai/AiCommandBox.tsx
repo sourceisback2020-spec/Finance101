@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { db } from "../../data/db";
 import { localIsoDate } from "../../domain/calculations";
 import type { BankAccount, CreditCard, RetirementEntry, Scenario, Subscription, Transaction } from "../../domain/models";
+import { clearScheduledChargesForSubscription, syncScheduledChargesForSubscription } from "../../services/subscriptions/scheduledCharges";
 import { useFinanceStore } from "../../state/store";
 
 type ParseContext = {
@@ -18,36 +19,9 @@ type ParsedAction = {
 };
 
 const STOP_WORDS = [
-  "on",
-  "date",
-  "note",
-  "category",
-  "merchant",
-  "source",
-  "from",
-  "to",
-  "into",
-  "account",
-  "balance",
-  "available",
-  "apy",
-  "type",
-  "institution",
-  "nickname",
-  "limit",
-  "apr",
-  "min",
-  "due",
-  "cost",
-  "frequency",
-  "amount",
-  "months",
-  "duration",
-  "payment",
-  "schedule",
-  "employee",
-  "match",
-  "return"
+  "on", "date", "note", "category", "merchant", "source", "from", "to", "into", "account",
+  "balance", "available", "apy", "type", "institution", "nickname", "limit", "apr", "min",
+  "due", "cost", "frequency", "amount", "months", "duration", "payment", "schedule", "employee", "match", "return"
 ];
 
 function parseAmount(input: string) {
@@ -69,6 +43,22 @@ function parseDate(input: string) {
   }
   const dateMatch = input.match(/\b\d{4}-\d{2}-\d{2}\b/);
   return dateMatch?.[0] ?? localIsoDate();
+}
+
+function nextCycleDate(frequency: Subscription["frequency"]) {
+  const base = new Date();
+  const monthsToAdd = frequency === "monthly" ? 1 : frequency === "quarterly" ? 3 : 12;
+  base.setMonth(base.getMonth() + monthsToAdd);
+  return localIsoDate(base);
+}
+
+function parseSubscriptionDueDate(input: string, frequency: Subscription["frequency"]) {
+  const dueField = parseField(input, ["due"]);
+  if (dueField) return dueField;
+  if (/\b(today|tomorrow|\d{4}-\d{2}-\d{2})\b/i.test(input)) {
+    return parseDate(input);
+  }
+  return nextCycleDate(frequency);
 }
 
 function parseNumberByKey(input: string, keys: string[]) {
@@ -102,8 +92,7 @@ function extractEntityName(input: string, entityWord: string) {
   const value = match[1];
   const stopRegex = new RegExp(`\\b(${STOP_WORDS.join("|")})\\b`, "i");
   const stopIdx = value.search(stopRegex);
-  const cleaned = (stopIdx === -1 ? value : value.slice(0, stopIdx)).trim();
-  return cleaned;
+  return (stopIdx === -1 ? value : value.slice(0, stopIdx)).trim();
 }
 
 function fuzzyFind<T>(items: T[], text: string, selector: (item: T) => string) {
@@ -125,6 +114,54 @@ function resolveAccountId(raw: string, banks: BankAccount[], cards: CreditCard[]
   return "unassigned";
 }
 
+function parseInlineAccount(input: string) {
+  const accountField = parseField(input, ["from", "to", "into", "account", "on"]);
+  if (accountField) return accountField;
+  return input.match(/\bon\s+([a-z0-9\-_ ]+)$/i)?.[1]?.trim() ?? "";
+}
+
+function removeMoneyText(input: string) {
+  return input.replace(/\$-?\d+(?:\.\d{1,2})?/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function inferMerchantFromSimpleText(input: string) {
+  const stripped = removeMoneyText(input)
+    .replace(/\b(expense|income|spent|paid|pay|bought|purchase|deposit|received|add|create|new|update|set)\b/gi, " ")
+    .replace(/\b(today|tomorrow|\d{4}-\d{2}-\d{2})\b/gi, " ")
+    .replace(/\b(on|from|to|into|account|at|category|note|date)\b\s+[a-z0-9\-_ ]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!stripped) return "Manual Entry";
+  return stripped.split(" ").slice(0, 4).join(" ");
+}
+
+function inferCategoryFromMerchant(merchant: string) {
+  const lower = merchant.toLowerCase();
+  if (/\b(mcdonalds|chipotle|starbucks|restaurant|cafe|pizza|burger)\b/.test(lower)) return "Dining";
+  if (/\b(costco|walmart|target|kroger|trader joe|aldi|grocery)\b/.test(lower)) return "Groceries";
+  if (/\b(shell|chevron|exxon|bp|gas)\b/.test(lower)) return "Transportation";
+  if (/\b(netflix|spotify|hulu|disney)\b/.test(lower)) return "Entertainment";
+  if (/\b(rent|apartment|landlord|mortgage)\b/.test(lower)) return "Housing";
+  return "General";
+}
+
+function buildSubscriptionActions(payload: Subscription, existing: Subscription | null, mode: "upsert" | "delete" = "upsert") {
+  if (mode === "delete") {
+    return {
+      actions: [
+        { label: `Clear scheduled charges ${payload.name}`, run: () => clearScheduledChargesForSubscription(payload.id) },
+        { label: `Delete subscription ${payload.name}`, run: () => db.deleteSubscription(payload.id) }
+      ] as ParsedAction[]
+    };
+  }
+  return {
+    actions: [
+      { label: `${existing ? "Update" : "Add"} subscription ${payload.name}`, run: () => db.upsertSubscription(payload) },
+      { label: `Sync scheduled charges ${payload.name}`, run: () => syncScheduledChargesForSubscription(payload) }
+    ] as ParsedAction[]
+  };
+}
+
 function parseTransferCommand(input: string, context: ParseContext) {
   if (!/^\s*transfer\b/i.test(input)) return null;
   const amount = parseAmount(input);
@@ -134,42 +171,18 @@ function parseTransferCommand(input: string, context: ParseContext) {
   if (!from || !to) return { error: "Transfer requires both 'from' and 'to' accounts." };
   const fromAccount = resolveAccountId(from, context.banks, context.cards);
   const toAccount = resolveAccountId(to, context.banks, context.cards);
-  if (fromAccount === "unassigned" || toAccount === "unassigned") {
-    return { error: "Could not match transfer accounts. Use account nickname/name." };
-  }
+  if (fromAccount === "unassigned" || toAccount === "unassigned") return { error: "Could not match transfer accounts. Use account nickname/name." };
   const date = parseDate(input);
   const note = parseField(input, ["note"]);
   return {
     actions: [
       {
         label: `Transfer out ${amount} from ${from}`,
-        run: () =>
-          db.upsertTransaction({
-            id: crypto.randomUUID(),
-            date,
-            amount,
-            type: "expense",
-            category: "Transfer",
-            merchant: "Internal Transfer",
-            account: fromAccount,
-            note: note || `Transfer to ${to}`,
-            recurring: 0
-          })
+        run: () => db.upsertTransaction({ id: crypto.randomUUID(), date, amount, type: "expense", category: "Transfer", merchant: "Internal Transfer", account: fromAccount, note: note || `Transfer to ${to}`, recurring: 0 })
       },
       {
         label: `Transfer in ${amount} to ${to}`,
-        run: () =>
-          db.upsertTransaction({
-            id: crypto.randomUUID(),
-            date,
-            amount,
-            type: "income",
-            category: "Transfer",
-            merchant: "Internal Transfer",
-            account: toAccount,
-            note: note || `Transfer from ${from}`,
-            recurring: 0
-          })
+        run: () => db.upsertTransaction({ id: crypto.randomUUID(), date, amount, type: "income", category: "Transfer", merchant: "Internal Transfer", account: toAccount, note: note || `Transfer from ${from}`, recurring: 0 })
       }
     ] as ParsedAction[]
   };
@@ -182,31 +195,42 @@ function parseTransactionCommand(input: string, context: ParseContext) {
   if (!isIncome && !isExpense) return null;
   const amount = parseAmount(input);
   if (amount <= 0) return { error: "Could not detect a valid transaction amount." };
-  const accountText = parseField(input, ["from", "to", "into", "account"]);
+  const accountText = parseInlineAccount(input);
   const category = parseField(input, ["category"]) || (isIncome ? "Income" : "General");
   const merchant = parseField(input, ["merchant", "at", "source", "payee"]) || (isIncome ? "Income Source" : "Manual Entry");
-  const note = parseField(input, ["note"]);
-  const date = parseDate(input);
-  const recurring = /\brecurring\b/i.test(input) ? 1 : 0;
   const payload: Transaction = {
     id: crypto.randomUUID(),
-    date,
+    date: parseDate(input),
     amount,
     type: isIncome ? "income" : "expense",
     category,
     merchant,
     account: resolveAccountId(accountText, context.banks, context.cards),
-    note,
-    recurring
+    note: parseField(input, ["note"]),
+    recurring: /\brecurring\b/i.test(input) ? 1 : 0
   };
-  return {
-    actions: [
-      {
-        label: `${payload.type} ${payload.amount} ${payload.category}`,
-        run: () => db.upsertTransaction(payload)
-      }
-    ] as ParsedAction[]
+  return { actions: [{ label: `${payload.type} ${payload.amount} ${payload.category}`, run: () => db.upsertTransaction(payload) }] as ParsedAction[] };
+}
+
+function parseSimpleTransactionCommand(input: string, context: ParseContext) {
+  if (/\b(bank|card|subscription|sub|scenario|retirement|401k|transfer)\b/i.test(input)) return null;
+  const amount = parseAmount(input);
+  if (amount <= 0) return null;
+  const lower = input.toLowerCase();
+  const type: Transaction["type"] = /\b(income|deposit|received|salary|paycheck)\b/.test(lower) ? "income" : "expense";
+  const merchant = parseField(input, ["merchant", "at", "source", "payee"]) || inferMerchantFromSimpleText(input);
+  const payload: Transaction = {
+    id: crypto.randomUUID(),
+    date: parseDate(input),
+    amount,
+    type,
+    category: parseField(input, ["category"]) || (type === "income" ? "Income" : inferCategoryFromMerchant(merchant)),
+    merchant,
+    account: resolveAccountId(parseInlineAccount(input), context.banks, context.cards),
+    note: parseField(input, ["note"]),
+    recurring: /\brecurring\b/i.test(input) ? 1 : 0
   };
+  return { actions: [{ label: `${payload.type} ${payload.amount} ${payload.merchant}`, run: () => db.upsertTransaction(payload) }] as ParsedAction[] };
 }
 
 function parseBankCommand(input: string, context: ParseContext) {
@@ -218,35 +242,29 @@ function parseBankCommand(input: string, context: ParseContext) {
     if (!existing) return { error: `Could not find bank account "${name}" to delete.` };
     return { actions: [{ label: `Delete bank ${existing.nickname}`, run: () => db.deleteBank(existing.id) }] as ParsedAction[] };
   }
-
-  const balance = parseNumberByKey(input, ["balance"]);
-  const available = parseNumberByKey(input, ["available"]);
-  const apy = parseNumberByKey(input, ["apy"]);
-  const type = parseWordByKey(input, ["type"]);
-  const institution = parseField(input, ["institution"]);
-  const nickname = parseField(input, ["nickname"]);
   const payload: BankAccount = existing
     ? {
         ...existing,
-        institution: institution || existing.institution,
-        nickname: nickname || existing.nickname,
-        type: (type as BankAccount["type"]) ?? existing.type,
-        currentBalance: typeof balance === "number" ? balance : existing.currentBalance,
-        availableBalance: typeof available === "number" ? available : existing.availableBalance,
-        apy: typeof apy === "number" ? apy : existing.apy,
-        lastUpdated: parseDate(input)
+        institution: parseField(input, ["institution"]) || existing.institution,
+        nickname: parseField(input, ["nickname"]) || existing.nickname,
+        type: (parseWordByKey(input, ["type"]) as BankAccount["type"]) ?? existing.type,
+        currentBalance: parseNumberByKey(input, ["balance"]) ?? existing.currentBalance,
+        availableBalance: parseNumberByKey(input, ["available"]) ?? existing.availableBalance,
+        apy: parseNumberByKey(input, ["apy"]) ?? existing.apy,
+        lastUpdated: parseDate(input),
+        imageDataUrl: existing.imageDataUrl ?? ""
       }
     : {
         id: crypto.randomUUID(),
-        institution: institution || name || "Manual Bank",
-        nickname: nickname || "Primary",
-        type: (type as BankAccount["type"]) ?? "checking",
-        currentBalance: typeof balance === "number" ? balance : 0,
-        availableBalance: typeof available === "number" ? available : typeof balance === "number" ? balance : 0,
-        apy: typeof apy === "number" ? apy : 0,
-        lastUpdated: parseDate(input)
+        institution: parseField(input, ["institution"]) || name || "Manual Bank",
+        nickname: parseField(input, ["nickname"]) || "Primary",
+        type: (parseWordByKey(input, ["type"]) as BankAccount["type"]) ?? "checking",
+        currentBalance: parseNumberByKey(input, ["balance"]) ?? 0,
+        availableBalance: parseNumberByKey(input, ["available"]) ?? parseNumberByKey(input, ["balance"]) ?? 0,
+        apy: parseNumberByKey(input, ["apy"]) ?? 0,
+        lastUpdated: parseDate(input),
+        imageDataUrl: ""
       };
-
   return { actions: [{ label: `${existing ? "Update" : "Add"} bank ${payload.nickname}`, run: () => db.upsertBank(payload) }] as ParsedAction[] };
 }
 
@@ -259,28 +277,24 @@ function parseCardCommand(input: string, context: ParseContext) {
     if (!existing) return { error: `Could not find card "${name}" to delete.` };
     return { actions: [{ label: `Delete card ${existing.name}`, run: () => db.deleteCard(existing.id) }] as ParsedAction[] };
   }
-  const balance = parseNumberByKey(input, ["balance"]);
-  const limit = parseNumberByKey(input, ["limit"]);
-  const apr = parseNumberByKey(input, ["apr"]);
-  const minPayment = parseNumberByKey(input, ["min", "minimum"]);
   const dueDate = parseField(input, ["due"]) || parseDate(input);
   const payload: CreditCard = existing
     ? {
         ...existing,
         name: name || existing.name,
-        balance: typeof balance === "number" ? balance : existing.balance,
-        limitAmount: typeof limit === "number" ? limit : existing.limitAmount,
-        apr: typeof apr === "number" ? apr : existing.apr,
-        minPayment: typeof minPayment === "number" ? minPayment : existing.minPayment,
+        balance: parseNumberByKey(input, ["balance"]) ?? existing.balance,
+        limitAmount: parseNumberByKey(input, ["limit"]) ?? existing.limitAmount,
+        apr: parseNumberByKey(input, ["apr"]) ?? existing.apr,
+        minPayment: parseNumberByKey(input, ["min", "minimum"]) ?? existing.minPayment,
         dueDate
       }
     : {
         id: crypto.randomUUID(),
         name: name || "Card",
-        balance: typeof balance === "number" ? balance : 0,
-        limitAmount: typeof limit === "number" ? limit : 0,
-        apr: typeof apr === "number" ? apr : 0,
-        minPayment: typeof minPayment === "number" ? minPayment : 0,
+        balance: parseNumberByKey(input, ["balance"]) ?? 0,
+        limitAmount: parseNumberByKey(input, ["limit"]) ?? 0,
+        apr: parseNumberByKey(input, ["apr"]) ?? 0,
+        minPayment: parseNumberByKey(input, ["min", "minimum"]) ?? 0,
         dueDate
       };
   return { actions: [{ label: `${existing ? "Update" : "Add"} card ${payload.name}`, run: () => db.upsertCard(payload) }] as ParsedAction[] };
@@ -293,33 +307,66 @@ function parseSubscriptionCommand(input: string, context: ParseContext) {
   const existing = fuzzyFind(context.subscriptions, name, (item) => `${item.name} ${item.id}`);
   if (action === "delete") {
     if (!existing) return { error: `Could not find subscription "${name}" to delete.` };
-    return { actions: [{ label: `Delete subscription ${existing.name}`, run: () => db.deleteSubscription(existing.id) }] as ParsedAction[] };
+    return buildSubscriptionActions(existing, existing, "delete");
   }
-  const cost = parseNumberByKey(input, ["cost", "price", "amount"]);
-  const frequency = parseWordByKey(input, ["frequency"]) || (/\bmonthly|quarterly|yearly\b/i.exec(input)?.[0].toLowerCase() ?? undefined);
-  const due = parseField(input, ["due"]) || parseDate(input);
-  const category = parseField(input, ["category"]) || existing?.category || "General";
-  const isActive = /\b(inactive|pause|paused|disabled)\b/i.test(input) ? 0 : 1;
+  const frequency = (parseWordByKey(input, ["frequency"]) || /\bmonthly|quarterly|yearly\b/i.exec(input)?.[0]?.toLowerCase() || "monthly") as Subscription["frequency"];
   const payload: Subscription = existing
     ? {
         ...existing,
         name: name || existing.name,
-        cost: typeof cost === "number" ? cost : existing.cost,
-        frequency: (frequency as Subscription["frequency"]) ?? existing.frequency,
-        nextDueDate: due,
-        category,
-        isActive
+        cost: parseNumberByKey(input, ["cost", "price", "amount"]) ?? existing.cost,
+        frequency,
+        nextDueDate: parseSubscriptionDueDate(input, frequency),
+        category: parseField(input, ["category"]) || existing.category || "General",
+        accountId: resolveAccountId(parseInlineAccount(input), context.banks, context.cards) || existing.accountId || "unassigned",
+        imageDataUrl: existing.imageDataUrl ?? "",
+        isActive: /\b(inactive|pause|paused|disabled)\b/i.test(input) ? 0 : 1
       }
     : {
         id: crypto.randomUUID(),
         name: name || "Subscription",
-        cost: typeof cost === "number" ? cost : 0,
-        frequency: (frequency as Subscription["frequency"]) ?? "monthly",
-        nextDueDate: due,
-        category,
-        isActive
+        cost: parseNumberByKey(input, ["cost", "price", "amount"]) ?? 0,
+        frequency,
+        nextDueDate: parseSubscriptionDueDate(input, frequency),
+        category: parseField(input, ["category"]) || "General",
+        accountId: resolveAccountId(parseInlineAccount(input), context.banks, context.cards),
+        imageDataUrl: "",
+        isActive: /\b(inactive|pause|paused|disabled)\b/i.test(input) ? 0 : 1
       };
-  return { actions: [{ label: `${existing ? "Update" : "Add"} subscription ${payload.name}`, run: () => db.upsertSubscription(payload) }] as ParsedAction[] };
+  return buildSubscriptionActions(payload, existing);
+}
+
+function parseImplicitSubscriptionCommand(input: string, context: ParseContext) {
+  if (!/\b(monthly|quarterly|yearly)\b/i.test(input)) return null;
+  if (/\b(income|expense|spent|paid|transfer|bank|card|scenario|retirement|401k)\b/i.test(input)) return null;
+  const amount = parseAmount(input);
+  if (amount <= 0) return null;
+  const name = inferMerchantFromSimpleText(input);
+  const existing = fuzzyFind(context.subscriptions, name, (item) => `${item.name} ${item.id}`);
+  const payload: Subscription = existing
+    ? {
+        ...existing,
+        name: name || existing.name,
+        cost: amount,
+        frequency: (/\bmonthly|quarterly|yearly\b/i.exec(input)?.[0].toLowerCase() as Subscription["frequency"]) || existing.frequency,
+        nextDueDate: parseSubscriptionDueDate(input, (/\bmonthly|quarterly|yearly\b/i.exec(input)?.[0].toLowerCase() as Subscription["frequency"]) || existing.frequency),
+        category: existing.category || inferCategoryFromMerchant(name),
+        accountId: resolveAccountId(parseInlineAccount(input), context.banks, context.cards) || existing.accountId || "unassigned",
+        imageDataUrl: existing.imageDataUrl ?? "",
+        isActive: 1
+      }
+    : {
+        id: crypto.randomUUID(),
+        name: name || "Subscription",
+        cost: amount,
+        frequency: ((/\bmonthly|quarterly|yearly\b/i.exec(input)?.[0].toLowerCase() as Subscription["frequency"]) || "monthly"),
+        nextDueDate: parseSubscriptionDueDate(input, ((/\bmonthly|quarterly|yearly\b/i.exec(input)?.[0].toLowerCase() as Subscription["frequency"]) || "monthly")),
+        category: inferCategoryFromMerchant(name),
+        accountId: resolveAccountId(parseInlineAccount(input), context.banks, context.cards),
+        imageDataUrl: "",
+        isActive: 1
+      };
+  return buildSubscriptionActions(payload, existing);
 }
 
 function parseScenarioCommand(input: string, context: ParseContext) {
@@ -331,33 +378,27 @@ function parseScenarioCommand(input: string, context: ParseContext) {
     if (!existing) return { error: `Could not find scenario "${name}" to delete.` };
     return { actions: [{ label: `Delete scenario ${existing.name}`, run: () => db.deleteScenario(existing.id) }] as ParsedAction[] };
   }
-  const amount = parseNumberByKey(input, ["amount", "purchase", "cost"]);
-  const months = parseNumberByKey(input, ["months", "duration"]);
-  const paymentType = /\bcard\b/i.test(input) ? "card" : "cash";
-  const accountText = parseField(input, ["account", "from"]);
-  const scheduleDate = parseField(input, ["schedule"]) || parseDate(input);
-  const isApplied = /\b(apply|active|enabled)\b/i.test(input) ? 1 : /\b(draft|off|disabled)\b/i.test(input) ? 0 : existing?.isApplied ?? 0;
   const payload: Scenario = existing
     ? {
         ...existing,
         name: name || existing.name,
-        purchaseAmount: typeof amount === "number" ? amount : existing.purchaseAmount,
-        durationMonths: typeof months === "number" ? Math.max(1, Math.round(months)) : existing.durationMonths,
-        paymentType,
-        accountId: resolveAccountId(accountText, context.banks, context.cards) || existing.accountId,
-        scheduleDate,
-        isApplied
+        purchaseAmount: parseNumberByKey(input, ["amount", "purchase", "cost"]) ?? existing.purchaseAmount,
+        durationMonths: Math.max(1, Math.round(parseNumberByKey(input, ["months", "duration"]) ?? existing.durationMonths)),
+        paymentType: /\bcard\b/i.test(input) ? "card" : "cash",
+        accountId: resolveAccountId(parseField(input, ["account", "from"]), context.banks, context.cards),
+        scheduleDate: parseField(input, ["schedule"]) || parseDate(input),
+        isApplied: /\b(apply|active|enabled)\b/i.test(input) ? 1 : /\b(draft|off|disabled)\b/i.test(input) ? 0 : existing.isApplied
       }
     : {
         id: crypto.randomUUID(),
         name: name || "Scenario",
-        purchaseAmount: typeof amount === "number" ? amount : 0,
-        durationMonths: typeof months === "number" ? Math.max(1, Math.round(months)) : 1,
-        paymentType,
+        purchaseAmount: parseNumberByKey(input, ["amount", "purchase", "cost"]) ?? 0,
+        durationMonths: Math.max(1, Math.round(parseNumberByKey(input, ["months", "duration"]) ?? 1)),
+        paymentType: /\bcard\b/i.test(input) ? "card" : "cash",
         createdAt: localIsoDate(),
-        accountId: resolveAccountId(accountText, context.banks, context.cards),
-        scheduleDate,
-        isApplied
+        accountId: resolveAccountId(parseField(input, ["account", "from"]), context.banks, context.cards),
+        scheduleDate: parseField(input, ["schedule"]) || parseDate(input),
+        isApplied: /\b(apply|active|enabled)\b/i.test(input) ? 1 : 0
       };
   return { actions: [{ label: `${existing ? "Update" : "Add"} scenario ${payload.name}`, run: () => db.upsertScenario(payload) }] as ParsedAction[] };
 }
@@ -371,39 +412,23 @@ function parseRetirementCommand(input: string, context: ParseContext) {
     if (!existing) return { error: `Could not find retirement entry on ${date} to delete.` };
     return { actions: [{ label: `Delete retirement entry ${date}`, run: () => db.deleteRetirementEntry(existing.id) }] as ParsedAction[] };
   }
-  const balance = parseNumberByKey(input, ["balance"]) ?? existing?.balance ?? 0;
-  const employee = parseNumberByKey(input, ["employee", "contribution"]) ?? existing?.employeeContribution ?? 0;
-  const employerMatch = parseNumberByKey(input, ["match", "employer"]) ?? existing?.employerMatch ?? 0;
-  const annualReturn = parseNumberByKey(input, ["return", "annual"]) ?? existing?.annualReturn ?? 7;
   const payload: RetirementEntry = {
     id: existing?.id ?? crypto.randomUUID(),
     date,
-    employeeContribution: employee,
-    employerMatch,
-    balance,
-    annualReturn
+    employeeContribution: parseNumberByKey(input, ["employee", "contribution"]) ?? existing?.employeeContribution ?? 0,
+    employerMatch: parseNumberByKey(input, ["match", "employer"]) ?? existing?.employerMatch ?? 0,
+    balance: parseNumberByKey(input, ["balance"]) ?? existing?.balance ?? 0,
+    annualReturn: parseNumberByKey(input, ["return", "annual"]) ?? existing?.annualReturn ?? 7
   };
   return { actions: [{ label: `${existing ? "Update" : "Add"} retirement entry ${date}`, run: () => db.upsertRetirementEntry(payload) }] as ParsedAction[] };
 }
 
-function parseActions(input: string, context: ParseContext) {
-  const statements = input
-    .split(/\n|;/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+export function parseActions(input: string, context: ParseContext) {
+  const statements = input.split(/\n|;/).map((line) => line.trim()).filter(Boolean);
   if (statements.length === 0) return { error: "Enter at least one command." };
-
   const actions: ParsedAction[] = [];
   for (const statement of statements) {
-    const parsers = [
-      parseTransferCommand,
-      parseBankCommand,
-      parseCardCommand,
-      parseSubscriptionCommand,
-      parseScenarioCommand,
-      parseRetirementCommand,
-      parseTransactionCommand
-    ] as const;
+    const parsers = [parseTransferCommand, parseBankCommand, parseCardCommand, parseSubscriptionCommand, parseImplicitSubscriptionCommand, parseScenarioCommand, parseRetirementCommand, parseTransactionCommand, parseSimpleTransactionCommand] as const;
     let resolved = false;
     for (const parser of parsers) {
       const result = parser(statement, context);
@@ -415,7 +440,6 @@ function parseActions(input: string, context: ParseContext) {
     }
     if (!resolved) return { error: `Could not parse command: "${statement}"` };
   }
-
   return { actions };
 }
 
@@ -432,8 +456,10 @@ export function AiCommandBox() {
 
   const examples = useMemo(
     () => [
+      "$32 mcdonalds on chase",
       "expense $42.80 category Food at Chipotle from chase checking on 2026-02-13 note lunch",
       "income $2100 category Salary source Employer into chase checking on 2026-02-15",
+      "netflix $15.49 monthly on 2026-03-01",
       "transfer $300 from chase checking to ally savings on today",
       "bank update chase checking balance 1825.34 available 1710.00 apy 0.5",
       "card add amex gold balance 2200 limit 6000 apr 24.99 min 80 due 2026-03-07",
@@ -453,15 +479,12 @@ export function AiCommandBox() {
     setBusy(true);
     setStatus(null);
     try {
-      for (const action of parsed.actions) {
-        await action.run();
-      }
+      for (const action of parsed.actions) await action.run();
       await refreshAll();
       setStatus(`Applied ${parsed.actions.length} change${parsed.actions.length === 1 ? "" : "s"}: ${parsed.actions.map((a) => a.label).join(" | ")}`);
       setInput("");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not apply command.";
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : "Could not apply command.");
     } finally {
       setBusy(false);
     }
@@ -471,23 +494,16 @@ export function AiCommandBox() {
     <article className="panel ai-command-panel">
       <div className="panel-head">
         <h3>AI Command Box (Overview Only)</h3>
-        <button className="chip-btn" onClick={() => setInput(examples.join("\n"))}>
-          Insert Examples
-        </button>
+        <button className="chip-btn" onClick={() => setInput(examples.join("\n"))}>Insert Examples</button>
       </div>
-      <p className="muted">Enter one command per line. Supports add/update/delete for transactions, transfers, banks, cards, subscriptions, scenarios, and retirement entries.</p>
+      <p className="muted">Simple commands work: "$32 mcdonalds on chase", "netflix $15 monthly on 2026-03-01", "transfer $200 from checking to savings".</p>
       <label>
         Command Input
-        <textarea rows={7} value={input} onChange={(event) => setInput(event.target.value)} placeholder={examples[0]} />
+        <textarea rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder={examples[0]} />
       </label>
       <div className="row-actions">
-        <button type="button" onClick={() => void applyCommands()} disabled={busy || input.trim().length === 0}>
-          {busy ? "Applying..." : "Apply Commands"}
-        </button>
+        <button type="button" onClick={() => void applyCommands()} disabled={busy || input.trim().length === 0}>{busy ? "Applying..." : "Apply Commands"}</button>
       </div>
-      <p className="muted">
-        Quick format tips: use keywords like <code>category</code>, <code>from</code>, <code>to</code>, <code>on</code>, <code>balance</code>, <code>limit</code>, <code>due</code>, <code>cost</code>, <code>months</code>, <code>payment</code>, <code>schedule</code>, <code>employee</code>, <code>match</code>, <code>return</code>.
-      </p>
       {status ? <p className="muted">{status}</p> : null}
     </article>
   );

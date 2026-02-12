@@ -1,11 +1,38 @@
 import { useMemo, useState } from "react";
+import { useFinanceStore } from "../../state/store";
 import { useAppearance } from "../../ui/theme/ThemeContext";
+import { disableDeveloperSeedData, enableDeveloperSeedData, isDeveloperSeedEnabled } from "./developerSeed";
 
 export function SettingsPanel() {
   const { appearance, setAppearance, setEffect, savedPresets, builtinPresets, applyPreset, savePreset, deletePreset, randomize } = useAppearance();
   const [presetName, setPresetName] = useState("");
+  const refreshAll = useFinanceStore((state) => state.refreshAll);
+  const [developerMode, setDeveloperMode] = useState(() => isDeveloperSeedEnabled());
+  const [developerBusy, setDeveloperBusy] = useState(false);
+  const [developerStatus, setDeveloperStatus] = useState<string | null>(null);
 
   const radiusLabel = useMemo(() => `${Math.round(appearance.radius)}px`, [appearance.radius]);
+
+  async function toggleDeveloperMode(enabled: boolean) {
+    setDeveloperBusy(true);
+    setDeveloperStatus(null);
+    try {
+      if (enabled) {
+        await enableDeveloperSeedData();
+        setDeveloperStatus("Developer test account loaded with realistic sample data across all tabs.");
+      } else {
+        await disableDeveloperSeedData();
+        setDeveloperStatus("Developer test account disabled and your prior dataset restored.");
+      }
+      setDeveloperMode(enabled);
+      await refreshAll();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not update developer test account mode.";
+      setDeveloperStatus(message);
+    } finally {
+      setDeveloperBusy(false);
+    }
+  }
 
   return (
     <section className="stack-lg">
@@ -144,6 +171,25 @@ export function SettingsPanel() {
           <label className="switch-row"><input type="checkbox" checked={appearance.effects.scrollReveal} onChange={(e) => setEffect("scrollReveal", e.target.checked)} />Scroll reveal animations</label>
           <label className="switch-row"><input type="checkbox" checked={appearance.effects.glitchHeaders} onChange={(e) => setEffect("glitchHeaders", e.target.checked)} />Glitch headers on hover</label>
         </div>
+      </article>
+
+      <article className="panel">
+        <h3>Developer Test Account</h3>
+        <p className="muted">Toggle on to replace current data with a realistic prefilled profile for demos/testing. Toggle off to restore your previous data snapshot.</p>
+        <div className="toggle-grid">
+          <label className="switch-row">
+            <input
+              type="checkbox"
+              checked={developerMode}
+              disabled={developerBusy}
+              onChange={(e) => {
+                void toggleDeveloperMode(e.target.checked);
+              }}
+            />
+            Developer test account ({developerBusy ? "working..." : developerMode ? "on" : "off"})
+          </label>
+        </div>
+        {developerStatus ? <p className="muted">{developerStatus}</p> : null}
       </article>
 
       <article className="panel">

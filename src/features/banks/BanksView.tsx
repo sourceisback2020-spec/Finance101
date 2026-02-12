@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -11,6 +13,7 @@ import {
 import { bankBalanceSeries, localIsoDate, transactionDeltaByAccount } from "../../domain/calculations";
 import type { BankAccount } from "../../domain/models";
 import { useFinanceStore } from "../../state/store";
+import { normalizeUploadImage } from "../../ui/images/imageTools";
 
 const initialState: BankAccount = {
   id: "",
@@ -20,11 +23,12 @@ const initialState: BankAccount = {
   currentBalance: 0,
   availableBalance: 0,
   apy: 0,
-  lastUpdated: new Date().toISOString().slice(0, 10)
+  lastUpdated: new Date().toISOString().slice(0, 10),
+  imageDataUrl: ""
 };
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 export function BanksView() {
@@ -34,11 +38,11 @@ export function BanksView() {
   const upsertTransaction = useFinanceStore((state) => state.upsertTransaction);
   const deleteBank = useFinanceStore((state) => state.deleteBank);
   const [form, setForm] = useState<BankAccount>(initialState);
-  const [editingBankId, setEditingBankId] = useState<string | null>(null);
-  const [editedBalance, setEditedBalance] = useState<number>(0);
   const [quickBankId, setQuickBankId] = useState("");
   const [quickAmount, setQuickAmount] = useState(0);
   const [quickMode, setQuickMode] = useState<"add" | "subtract">("add");
+  const [status, setStatus] = useState<string | null>(null);
+  const isEditing = Boolean(form.id);
   const balanceSeries = bankBalanceSeries(banks);
   const hasTimeline = balanceSeries.length >= 2;
   const today = localIsoDate();
@@ -59,16 +63,6 @@ export function BanksView() {
     event.preventDefault();
     await upsertBank({ ...form, id: form.id || crypto.randomUUID() });
     setForm(initialState);
-  }
-
-  async function saveEditedBalance(bank: BankAccount) {
-    await upsertBank({
-      ...bank,
-      currentBalance: editedBalance,
-      availableBalance: editedBalance,
-      lastUpdated: localIsoDate()
-    });
-    setEditingBankId(null);
   }
 
   useEffect(() => {
@@ -110,6 +104,24 @@ export function BanksView() {
   const quickDelta = quickMode === "add" ? Math.max(0, quickAmount) : -Math.max(0, quickAmount);
   const quickLiveBalance = (quickBank?.currentBalance ?? 0) + (quickBank ? (postedByAccount.get(quickBank.id) ?? 0) : 0);
   const quickProjectedBalance = quickLiveBalance + quickDelta;
+  const liveByBank = useMemo(
+    () =>
+      banks.map((bank) => ({
+        name: bank.nickname || bank.institution,
+        live: bank.currentBalance + (postedByAccount.get(bank.id) ?? 0)
+      })),
+    [banks, postedByAccount]
+  );
+
+  async function onImagePicked(file: File | undefined) {
+    if (!file) return;
+    try {
+      const imageDataUrl = await normalizeUploadImage(file);
+      setForm((prev) => ({ ...prev, imageDataUrl }));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not process image.");
+    }
+  }
 
   return (
     <section className="stack-lg">
@@ -125,7 +137,7 @@ export function BanksView() {
       </div>
 
       <article className="panel">
-        <h3>Add Bank Account</h3>
+        <h3>{isEditing ? "Edit Bank Account" : "Add Bank Account"}</h3>
         <form className="form-grid" onSubmit={onSubmit}>
           <label>Institution<input value={form.institution} onChange={(e) => setForm({ ...form, institution: e.target.value })} /></label>
           <label>Nickname<input value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} /></label>
@@ -141,20 +153,67 @@ export function BanksView() {
           <label>Available Balance<input type="number" step="0.01" value={form.availableBalance} onChange={(e) => setForm({ ...form, availableBalance: Number(e.target.value) })} /></label>
           <label>APY %<input type="number" step="0.01" min="0" value={form.apy} onChange={(e) => setForm({ ...form, apy: Number(e.target.value) })} /></label>
           <label>Last Updated<input type="date" value={form.lastUpdated} onChange={(e) => setForm({ ...form, lastUpdated: e.target.value })} /></label>
-          <div className="row-actions"><button type="submit">Save Account</button></div>
+          <label>
+            Account Image
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                void onImagePicked(e.target.files?.[0]);
+              }}
+            />
+          </label>
+          {form.imageDataUrl ? (
+            <div className="image-upload-preview">
+              <img src={form.imageDataUrl} alt="Bank preview" />
+              <button type="button" className="danger-btn" onClick={() => setForm((prev) => ({ ...prev, imageDataUrl: "" }))}>
+                Remove Image
+              </button>
+            </div>
+          ) : null}
+          <div className="row-actions">
+            <button type="submit">{isEditing ? "Update Account" : "Save Account"}</button>
+            {isEditing ? (
+              <button type="button" onClick={() => setForm(initialState)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </form>
+      </article>
+
+      <article className="panel">
+        <h3>Live Balance by Account</h3>
+        {liveByBank.length === 0 ? (
+          <div className="chart-empty">Add bank accounts to visualize account balances.</div>
+        ) : (
+          <div className="chart-box">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart layout="vertical" data={liveByBank} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(value: number) => money(value)}
+                  contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
+                />
+                <Bar dataKey="live" fill="#56c7ff" radius={[0, 8, 8, 0]} barSize={18} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </article>
 
       <article className="panel">
         <h3>Liquidity Timeline</h3>
         {hasTimeline ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={180}>
               <LineChart data={balanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                 <XAxis dataKey="date" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                 <Line type="monotone" dataKey="total" stroke="#56c7ff" dot={false} strokeWidth={2.5} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -241,7 +300,12 @@ export function BanksView() {
             <tbody>
               {banks.map((bank) => (
                 <tr key={bank.id} className="row-credit">
-                  <td>{bank.institution}</td>
+                  <td>
+                    <div className="entity-with-image">
+                      {bank.imageDataUrl ? <img src={bank.imageDataUrl} alt={bank.institution} className="entity-thumb" /> : <span className="entity-thumb entity-thumb-fallback">B</span>}
+                      <span>{bank.institution}</span>
+                    </div>
+                  </td>
                   <td>{bank.nickname}</td>
                   <td>{bank.type}</td>
                   <td className="value-neutral">{money(bank.currentBalance)}</td>
@@ -251,25 +315,10 @@ export function BanksView() {
                   <td>{bank.apy}%</td>
                   <td>{bank.lastUpdated}</td>
                   <td>
-                    {editingBankId === bank.id ? (
-                      <div className="row-actions">
-                        <input type="number" step="0.01" value={editedBalance} onChange={(e) => setEditedBalance(Number(e.target.value))} />
-                        <button onClick={() => void saveEditedBalance(bank)}>Save</button>
-                        <button onClick={() => setEditingBankId(null)}>Cancel</button>
-                      </div>
-                    ) : (
-                      <div className="row-actions">
-                        <button
-                          onClick={() => {
-                            setEditingBankId(bank.id);
-                            setEditedBalance(bank.currentBalance);
-                          }}
-                        >
-                          Edit Balance
-                        </button>
-                        <button className="danger-btn" onClick={() => void deleteBank(bank.id)}>Delete</button>
-                      </div>
-                    )}
+                    <div className="row-actions">
+                      <button type="button" onClick={() => setForm(bank)}>Edit</button>
+                      <button className="danger-btn" onClick={() => void deleteBank(bank.id)}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -277,6 +326,7 @@ export function BanksView() {
           </table>
         </div>
       </article>
+      {status ? <p className="muted">{status}</p> : null}
     </section>
   );
 }

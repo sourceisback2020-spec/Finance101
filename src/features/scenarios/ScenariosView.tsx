@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
   Line,
@@ -26,7 +28,7 @@ const initialState: Scenario = {
 };
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 export function ScenariosView() {
@@ -38,6 +40,7 @@ export function ScenariosView() {
   const deleteScenario = useFinanceStore((state) => state.deleteScenario);
   const [form, setForm] = useState<Scenario>(initialState);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
+  const isEditing = Boolean(form.id);
 
   const selectedScenario = scenarios.find((scenario) => scenario.id === selectedScenarioId) ?? scenarios[0];
   const selectedResult = selectedScenario
@@ -64,6 +67,18 @@ export function ScenariosView() {
       ...scenarios.map((scenario) => evaluateScenario(scenario, metrics.netCashflow, metrics.monthlySubscriptions, cards).projectedDebt)
     );
   }, [scenarios, metrics.netCashflow, metrics.monthlySubscriptions, cards, metrics.totalCreditBalance]);
+  const scenarioBars = useMemo(
+    () =>
+      scenarios.map((scenario) => {
+        const result = evaluateScenario(scenario, metrics.netCashflow, metrics.monthlySubscriptions, cards);
+        return {
+          name: scenario.name,
+          monthlyCost: result.monthlyScenarioCost,
+          disposableAfter: result.projectedDisposableAfterPurchase
+        };
+      }),
+    [scenarios, metrics.netCashflow, metrics.monthlySubscriptions, cards]
+  );
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -81,7 +96,7 @@ export function ScenariosView() {
         <article className="kpi-card"><h3>Max Projected Debt</h3><strong className="value-negative">{money(maxProjectedDebt)}</strong></article>
       </div>
       <article className="panel">
-        <h3>Create Scenario</h3>
+        <h3>{isEditing ? "Edit Scenario" : "Create Scenario"}</h3>
         <form className="form-grid" onSubmit={onSubmit}>
           <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label>Purchase Amount<input type="number" min="0" step="0.01" value={form.purchaseAmount} onChange={(e) => setForm({ ...form, purchaseAmount: Number(e.target.value) })} /></label>
@@ -116,9 +131,37 @@ export function ScenariosView() {
             <input type="checkbox" checked={Boolean(form.isApplied)} onChange={(e) => setForm({ ...form, isApplied: e.target.checked ? 1 : 0 })} />
             Apply scenario across app
           </label>
-          <div className="row-actions"><button type="submit">Analyze</button></div>
+          <div className="row-actions">
+            <button type="submit">{isEditing ? "Update" : "Analyze"}</button>
+            {isEditing ? (
+              <button type="button" onClick={() => setForm(initialState)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </form>
       </article>
+      <article className="panel">
+        <h3>Scenario Comparison</h3>
+        {scenarioBars.length === 0 ? (
+          <p className="muted">Create scenarios to compare monthly impact side by side.</p>
+        ) : (
+          <div className="chart-box">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart layout="vertical" data={scenarioBars} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={150} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <Legend />
+                <Bar dataKey="monthlyCost" fill="#ffb26b" radius={[0, 8, 8, 0]} barSize={16} isAnimationActive={false} />
+                <Bar dataKey="disposableAfter" fill="#84f2c8" radius={[0, 8, 8, 0]} barSize={16} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </article>
+
       <article className="panel">
         <div className="panel-head">
           <h3>Scenario Timeline</h3>
@@ -134,12 +177,12 @@ export function ScenariosView() {
           <p className="muted">Create a scenario to view projected disposable cash and debt over time.</p>
         ) : (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={200}>
               <LineChart data={scenarioChartSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                 <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                 <Legend />
                 <Line type="monotone" dataKey="disposable" stroke="#84f2c8" dot={false} strokeWidth={2} isAnimationActive={false} />
                 <Line type="monotone" dataKey="debt" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />
@@ -165,7 +208,12 @@ export function ScenariosView() {
                     <td className="value-negative">{money(result.projectedDebt)}</td>
                     <td>{scenario.scheduleDate}</td>
                     <td>{scenario.isApplied ? "Yes" : "No"}</td>
-                    <td><button className="danger-btn" onClick={() => void deleteScenario(scenario.id)}>Delete</button></td>
+                    <td>
+                      <div className="row-actions">
+                        <button type="button" onClick={() => setForm(scenario)}>Edit</button>
+                        <button className="danger-btn" onClick={() => void deleteScenario(scenario.id)}>Delete</button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}

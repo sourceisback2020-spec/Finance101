@@ -37,7 +37,7 @@ function getInitialState(defaultAccount = "unassigned"): Transaction {
 }
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 function valueClass(value: number) {
@@ -68,6 +68,7 @@ export function TransactionsView() {
   const [showIncome, setShowIncome] = useState(true);
   const [showExpense, setShowExpense] = useState(true);
   const [showNet, setShowNet] = useState(true);
+  const isEditing = Boolean(form.id);
 
   const filtered = useMemo(
     () =>
@@ -169,7 +170,7 @@ export function TransactionsView() {
       </div>
 
       <article className="panel">
-        <h3>Add Transaction</h3>
+        <h3>{isEditing ? "Edit Transaction" : "Add Transaction"}</h3>
         <form className="form-grid" onSubmit={onSubmit}>
           <label>Date<input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
           <label>Amount<input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></label>
@@ -206,7 +207,12 @@ export function TransactionsView() {
             Recurring
           </label>
           <div className="row-actions">
-            <button type="submit">Save</button>
+            <button type="submit">{isEditing ? "Update" : "Save"}</button>
+            {isEditing ? (
+              <button type="button" onClick={() => setForm(getInitialState(banks[0]?.id ?? "unassigned"))}>
+                Cancel
+              </button>
+            ) : null}
             <label className="secondary-btn">
               Import CSV
               <input
@@ -252,13 +258,13 @@ export function TransactionsView() {
           <div className="chart-panel">
             {hasCashflowSeries ? (
               <div className="chart-box">
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={180}>
                   {primaryChartMode === "area" ? (
                     <AreaChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                       <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
                       {showIncome && <Area type="monotone" dataKey="income" stroke="#56d3a1" fill="rgba(86,211,161,0.2)" strokeWidth={2} isAnimationActive={false} />}
                       {showExpense && <Area type="monotone" dataKey="expense" stroke="#ff8a92" fill="rgba(255,138,146,0.2)" strokeWidth={2} isAnimationActive={false} />}
@@ -268,8 +274,8 @@ export function TransactionsView() {
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                       <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
                       {showIncome && <Line type="monotone" dataKey="income" stroke="#56d3a1" dot={false} strokeWidth={2} isAnimationActive={false} />}
                       {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />}
@@ -288,8 +294,9 @@ export function TransactionsView() {
                         axisLine={false}
                         tickLine={false}
                       />
-                      <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip
+                        formatter={(value: number) => money(value)}
                         contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
                         labelFormatter={(label) => filteredCandleSeries.find((point) => point.idx === Number(label))?.month ?? ""}
                       />
@@ -321,8 +328,8 @@ export function TransactionsView() {
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                       <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
                       {showIncome && <Line type="monotone" dataKey="income" stroke="#56d3a1" dot={false} strokeWidth={2} isAnimationActive={false} />}
                       {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />}
@@ -338,12 +345,12 @@ export function TransactionsView() {
           <div className="chart-panel">
             {hasBalanceSeries ? (
               <div className="chart-box">
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={filteredBalanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                     <XAxis dataKey="date" hide={filteredBalanceSeries.length > 14} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                    <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                     <Line type="monotone" dataKey="balance" stroke="#ffb26b" dot={false} strokeWidth={2.5} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -378,7 +385,12 @@ export function TransactionsView() {
                     <td>{tx.category}</td>
                     <td className={tx.type === "income" ? "value-positive" : "value-negative"}>{money(tx.amount)}</td>
                     <td>{bankNameById[tx.account] ?? cardNameById[tx.account] ?? tx.account}</td>
-                    <td><button onClick={() => void postNow(tx)}>Post Now</button></td>
+                    <td>
+                      <div className="row-actions">
+                        <button onClick={() => void postNow(tx)}>Post Now</button>
+                        <button type="button" onClick={() => setForm(tx)}>Edit</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -408,7 +420,12 @@ export function TransactionsView() {
                   <td>{tx.merchant || "-"}</td>
                   <td className={tx.type === "income" ? "value-positive" : "value-negative"}>{money(tx.amount)}</td>
                   <td>{bankNameById[tx.account] ?? cardNameById[tx.account] ?? tx.account}</td>
-                  <td><button className="danger-btn" onClick={() => void deleteTransaction(tx.id)}>Delete</button></td>
+                  <td>
+                    <div className="row-actions">
+                      <button type="button" onClick={() => setForm(tx)}>Edit</button>
+                      <button className="danger-btn" onClick={() => void deleteTransaction(tx.id)}>Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

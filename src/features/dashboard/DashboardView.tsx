@@ -21,7 +21,7 @@ type ChartRange = "3M" | "6M" | "1Y" | "ALL";
 const piePalette = ["#5fd39a", "#6ea8fe", "#ffb26b", "#ff7c7c", "#b892ff", "#7fe7ff", "#ffd86a", "#5ff0cf"];
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 function rangeStart(range: ChartRange, todayIso: string) {
@@ -97,13 +97,13 @@ export function DashboardView() {
             <div className="chart-empty">Add transactions across multiple months to view trend lines.</div>
           ) : (
             <div className="chart-box">
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={200}>
                 {areaMode ? (
                   <AreaChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                     <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                    <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                     <Legend />
                     {showIncome && <Area type="monotone" dataKey="income" stroke="#5fd39a" fill="rgba(95,211,154,0.2)" isAnimationActive={false} />}
                     {showExpense && <Area type="monotone" dataKey="expense" stroke="#ff7c7c" fill="rgba(255,124,124,0.2)" isAnimationActive={false} />}
@@ -113,8 +113,8 @@ export function DashboardView() {
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                     <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                    <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                     <Legend />
                     {showIncome && <Line type="monotone" dataKey="income" stroke="#5fd39a" dot={false} isAnimationActive={false} />}
                     {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff7c7c" dot={false} isAnimationActive={false} />}
@@ -131,7 +131,7 @@ export function DashboardView() {
           {categorySpend.length === 0 ? (
             <div className="chart-empty">No expense categories yet. Add expense transactions to populate this chart.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
                   data={categorySpend}

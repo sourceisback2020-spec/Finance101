@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -23,7 +25,7 @@ const initialState: CreditCard = {
 };
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 export function CreditCardsView() {
@@ -32,6 +34,7 @@ export function CreditCardsView() {
   const upsertCard = useFinanceStore((state) => state.upsertCard);
   const deleteCard = useFinanceStore((state) => state.deleteCard);
   const [form, setForm] = useState<CreditCard>(initialState);
+  const isEditing = Boolean(form.id);
   const debtSeries = creditDebtProjectionSeries(cards, 24);
   const hasDebt = cards.some((card) => card.balance > 0);
   const today = localIsoDate();
@@ -50,6 +53,15 @@ export function CreditCardsView() {
   const totalLimit = useMemo(() => cards.reduce((sum, card) => sum + card.limitAmount, 0), [cards]);
   const utilization = totalLimit > 0 ? (liveDebtTotal / totalLimit) * 100 : 0;
   const totalMinPayment = useMemo(() => cards.reduce((sum, card) => sum + card.minPayment, 0), [cards]);
+  const debtByCard = useMemo(
+    () =>
+      cards.map((card) => ({
+        name: card.name,
+        liveDebt: card.balance - (postedByAccount.get(card.id) ?? 0),
+        limit: card.limitAmount
+      })),
+    [cards, postedByAccount]
+  );
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -68,7 +80,7 @@ export function CreditCardsView() {
         <article className="kpi-card"><h3>Min Payments / Mo</h3><strong className="value-warning">{money(totalMinPayment)}</strong></article>
       </div>
       <article className="panel">
-        <h3>Add Credit Card</h3>
+        <h3>{isEditing ? "Edit Credit Card" : "Add Credit Card"}</h3>
         <form className="form-grid" onSubmit={onSubmit}>
           <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label>Balance<input type="number" min="0" step="0.01" value={form.balance} onChange={(e) => setForm({ ...form, balance: Number(e.target.value) })} /></label>
@@ -76,20 +88,46 @@ export function CreditCardsView() {
           <label>APR %<input type="number" min="0" step="0.01" value={form.apr} onChange={(e) => setForm({ ...form, apr: Number(e.target.value) })} /></label>
           <label>Min Payment<input type="number" min="0" step="0.01" value={form.minPayment} onChange={(e) => setForm({ ...form, minPayment: Number(e.target.value) })} /></label>
           <label>Due Date<input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></label>
-          <div className="row-actions"><button type="submit">Save</button></div>
+          <div className="row-actions">
+            <button type="submit">{isEditing ? "Update" : "Save"}</button>
+            {isEditing ? (
+              <button type="button" onClick={() => setForm(initialState)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </form>
+      </article>
+
+      <article className="panel">
+        <h3>Debt by Card</h3>
+        {debtByCard.length === 0 ? (
+          <div className="chart-empty">Add cards to compare balances by account.</div>
+        ) : (
+          <div className="chart-box">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart layout="vertical" data={debtByCard} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <Bar dataKey="liveDebt" fill="#ff8a92" radius={[0, 8, 8, 0]} barSize={18} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </article>
 
       <article className="panel">
         <h3>Debt Trend Projection (Stock-Style)</h3>
         {hasDebt ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={190}>
               <LineChart data={debtSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                 <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                 <Line type="monotone" dataKey="debt" stroke="#ff8a92" dot={false} strokeWidth={2.5} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -116,7 +154,12 @@ export function CreditCardsView() {
                   <td>{card.apr}%</td>
                   <td className="value-warning">{money(card.minPayment)}</td>
                   <td>{card.dueDate}</td>
-                  <td><button className="danger-btn" onClick={() => void deleteCard(card.id)}>Delete</button></td>
+                  <td>
+                    <div className="row-actions">
+                      <button type="button" onClick={() => setForm(card)}>Edit</button>
+                      <button className="danger-btn" onClick={() => void deleteCard(card.id)}>Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

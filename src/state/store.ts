@@ -97,19 +97,28 @@ export const useFinanceStore = create<Store>((set, get) => ({
       scheduleDate: scenario.scheduleDate || localIsoDate(),
       isApplied: typeof scenario.isApplied === "number" ? scenario.isApplied : 0
     }));
+    const normalizedSubscriptions = subscriptions.map((subscription) => ({
+      ...subscription,
+      accountId: subscription.accountId ?? "unassigned",
+      imageDataUrl: subscription.imageDataUrl ?? ""
+    }));
+    const normalizedBanks = banks.map((bank) => ({
+      ...bank,
+      imageDataUrl: bank.imageDataUrl ?? ""
+    }));
     const scenarioTransactions = scenarioImpactTransactions(normalizedScenarios);
     const transactions = [...manualTransactions, ...scenarioTransactions];
     set({
       loading: false,
       transactions,
       manualTransactions,
-      subscriptions,
+      subscriptions: normalizedSubscriptions,
       cards,
-      banks,
+      banks: normalizedBanks,
       scenarios: normalizedScenarios,
       retirementEntries,
       uiPreferences,
-      metrics: calculateDashboardMetrics(transactions, subscriptions, cards, retirementEntries, banks)
+      metrics: calculateDashboardMetrics(transactions, normalizedSubscriptions, cards, retirementEntries, normalizedBanks)
     });
   },
   upsertTransaction: async (transaction) => {

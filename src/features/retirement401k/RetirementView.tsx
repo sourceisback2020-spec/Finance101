@@ -22,7 +22,7 @@ const initialState: RetirementEntry = {
 };
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 export function RetirementView() {
@@ -30,6 +30,7 @@ export function RetirementView() {
   const upsertEntry = useFinanceStore((state) => state.upsertRetirementEntry);
   const deleteEntry = useFinanceStore((state) => state.deleteRetirementEntry);
   const [form, setForm] = useState<RetirementEntry>(initialState);
+  const isEditing = Boolean(form.id);
   const projection = calculateRetirementProjection(entries);
   const trendSeries = retirementTrendSeries(entries);
   const hasTrend = trendSeries.length >= 2;
@@ -55,14 +56,21 @@ export function RetirementView() {
         <article className="kpi-card"><h3>Snapshots</h3><strong>{entries.length}</strong></article>
       </div>
       <article className="panel">
-        <h3>Add Snapshot</h3>
+        <h3>{isEditing ? "Edit Snapshot" : "Add Snapshot"}</h3>
         <form className="form-grid" onSubmit={onSubmit}>
           <label>Date<input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
           <label>Employee Contribution / Mo<input type="number" min="0" step="0.01" value={form.employeeContribution} onChange={(e) => setForm({ ...form, employeeContribution: Number(e.target.value) })} /></label>
           <label>Employer Match / Mo<input type="number" min="0" step="0.01" value={form.employerMatch} onChange={(e) => setForm({ ...form, employerMatch: Number(e.target.value) })} /></label>
           <label>Current Balance<input type="number" min="0" step="0.01" value={form.balance} onChange={(e) => setForm({ ...form, balance: Number(e.target.value) })} /></label>
           <label>Expected Annual Return %<input type="number" min="0" step="0.1" value={form.annualReturn} onChange={(e) => setForm({ ...form, annualReturn: Number(e.target.value) })} /></label>
-          <div className="row-actions"><button type="submit">Save Snapshot</button></div>
+          <div className="row-actions">
+            <button type="submit">{isEditing ? "Update Snapshot" : "Save Snapshot"}</button>
+            {isEditing ? (
+              <button type="button" onClick={() => setForm(initialState)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </form>
       </article>
 
@@ -75,12 +83,12 @@ export function RetirementView() {
         <h3>Balance Trend</h3>
         {hasTrend ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={180}>
               <LineChart data={trendSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                 <XAxis dataKey="date" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                 <Line type="monotone" dataKey="balance" stroke="#84f2c8" dot={false} strokeWidth={2.5} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -103,7 +111,12 @@ export function RetirementView() {
                   <td className="value-positive">{money(entry.employerMatch)}</td>
                   <td className="value-positive">{money(entry.balance)}</td>
                   <td>{entry.annualReturn}%</td>
-                  <td><button className="danger-btn" onClick={() => void deleteEntry(entry.id)}>Delete</button></td>
+                  <td>
+                    <div className="row-actions">
+                      <button type="button" onClick={() => setForm(entry)}>Edit</button>
+                      <button className="danger-btn" onClick={() => void deleteEntry(entry.id)}>Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

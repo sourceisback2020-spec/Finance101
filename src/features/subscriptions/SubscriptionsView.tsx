@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -8,32 +10,55 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { calculateMonthlySubscriptionCost, subscriptionForecastSeries } from "../../domain/calculations";
+import { calculateMonthlySubscriptionCost, localIsoDate, subscriptionForecastSeries } from "../../domain/calculations";
 import type { Subscription } from "../../domain/models";
+import { syncScheduledChargesForSubscription, clearScheduledChargesForSubscription } from "../../services/subscriptions/scheduledCharges";
 import { useFinanceStore } from "../../state/store";
+import { normalizeUploadImage } from "../../ui/images/imageTools";
 
 const initialState: Subscription = {
   id: "",
   name: "",
   cost: 0,
   frequency: "monthly",
-  nextDueDate: new Date().toISOString().slice(0, 10),
+  nextDueDate: (() => {
+    const next = new Date();
+    next.setMonth(next.getMonth() + 1);
+    return localIsoDate(next);
+  })(),
   category: "Software",
+  accountId: "unassigned",
+  imageDataUrl: "",
   isActive: 1
 };
 
 function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 export function SubscriptionsView() {
   const subscriptions = useFinanceStore((state) => state.subscriptions);
+  const banks = useFinanceStore((state) => state.banks);
+  const cards = useFinanceStore((state) => state.cards);
   const upsertSubscription = useFinanceStore((state) => state.upsertSubscription);
   const deleteSubscription = useFinanceStore((state) => state.deleteSubscription);
+  const refreshAll = useFinanceStore((state) => state.refreshAll);
   const [form, setForm] = useState<Subscription>(initialState);
+  const [status, setStatus] = useState<string | null>(null);
+  const isEditing = Boolean(form.id);
   const forecastSeries = subscriptionForecastSeries(subscriptions, 12);
   const activeSubs = useMemo(() => subscriptions.filter((sub) => sub.isActive), [subscriptions]);
   const monthlyCost = useMemo(() => calculateMonthlySubscriptionCost(subscriptions), [subscriptions]);
+  const spendBySubscription = useMemo(
+    () =>
+      [...activeSubs]
+        .map((sub) => ({
+          name: sub.name,
+          monthlyEquivalent: sub.frequency === "monthly" ? sub.cost : sub.frequency === "quarterly" ? sub.cost / 3 : sub.cost / 12
+        }))
+        .sort((a, b) => b.monthlyEquivalent - a.monthlyEquivalent),
+    [activeSubs]
+  );
   const yearlyCost = monthlyCost * 12;
   const nextRenewal = useMemo(
     () => [...activeSubs].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate))[0]?.nextDueDate ?? "N/A",
@@ -42,8 +67,30 @@ export function SubscriptionsView() {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    await upsertSubscription({ ...form, id: form.id || crypto.randomUUID() });
+    const payload = { ...form, id: form.id || crypto.randomUUID() };
+    await upsertSubscription(payload);
+    await syncScheduledChargesForSubscription(payload);
+    await refreshAll();
     setForm(initialState);
+    setStatus("Saved subscription and updated scheduled transactions.");
+  }
+
+  async function onDelete(subscription: Subscription) {
+    await clearScheduledChargesForSubscription(subscription.id);
+    await deleteSubscription(subscription.id);
+    await refreshAll();
+    setStatus(`Deleted ${subscription.name} and removed its scheduled charges.`);
+  }
+
+  async function onImagePicked(file: File | undefined) {
+    if (!file) return;
+    try {
+      const imageDataUrl = await normalizeUploadImage(file);
+      setForm((prev) => ({ ...prev, imageDataUrl }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not process image.";
+      setStatus(message);
+    }
   }
 
   return (
@@ -56,7 +103,7 @@ export function SubscriptionsView() {
         <article className="kpi-card"><h3>Next Renewal</h3><strong>{nextRenewal}</strong></article>
       </div>
       <article className="panel">
-        <h3>Add Subscription</h3>
+        <h3>{isEditing ? "Edit Subscription" : "Add Subscription"}</h3>
         <form className="form-grid" onSubmit={onSubmit}>
           <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label>Cost<input type="number" min="0" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></label>
@@ -69,23 +116,89 @@ export function SubscriptionsView() {
           </label>
           <label>Next Due<input type="date" value={form.nextDueDate} onChange={(e) => setForm({ ...form, nextDueDate: e.target.value })} /></label>
           <label>Category<input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></label>
+          <label>Charge Account
+            <select value={form.accountId} onChange={(e) => setForm({ ...form, accountId: e.target.value })}>
+              <option value="unassigned">Unassigned / Cash</option>
+              <optgroup label="Bank Accounts">
+                {banks.map((bank) => (
+                  <option key={bank.id} value={bank.id}>
+                    {bank.institution} - {bank.nickname}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Credit Cards">
+                {cards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    Card - {card.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </label>
+          <label>
+            Icon Image
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                void onImagePicked(e.target.files?.[0]);
+              }}
+            />
+          </label>
           <label className="checkbox-row">
             <input type="checkbox" checked={Boolean(form.isActive)} onChange={(e) => setForm({ ...form, isActive: e.target.checked ? 1 : 0 })} />
             Active
           </label>
-          <div className="row-actions"><button type="submit">Save</button></div>
+          {form.imageDataUrl ? (
+            <div className="image-upload-preview">
+              <img src={form.imageDataUrl} alt="Subscription preview" />
+              <button type="button" className="danger-btn" onClick={() => setForm((prev) => ({ ...prev, imageDataUrl: "" }))}>
+                Remove Image
+              </button>
+            </div>
+          ) : null}
+          <div className="row-actions">
+            <button type="submit">{isEditing ? "Update" : "Save"}</button>
+            {isEditing ? (
+              <button type="button" onClick={() => setForm(initialState)}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </form>
+      </article>
+
+      <article className="panel">
+        <h3>Cost by Subscription (Monthly Equivalent)</h3>
+        {spendBySubscription.length === 0 ? (
+          <div className="chart-empty">No active subscriptions to visualize.</div>
+        ) : (
+          <div className="chart-box">
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart layout="vertical" data={spendBySubscription} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(value: number) => money(value)}
+                  contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
+                />
+                <Bar dataKey="monthlyEquivalent" fill="#8ed0ff" radius={[0, 8, 8, 0]} barSize={18} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </article>
 
       <article className="panel">
         <h3>Recurring Cost Forecast (12 Months)</h3>
         <div className="chart-box">
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={180}>
             <LineChart data={forecastSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
               <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+              <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
               <Line type="monotone" dataKey="recurringCost" stroke="#8ed0ff" dot={false} strokeWidth={2} isAnimationActive={false} />
               <Line type="monotone" dataKey="cumulative" stroke="#ffb26b" dot={false} strokeWidth={2} isAnimationActive={false} />
             </LineChart>
@@ -101,14 +214,29 @@ export function SubscriptionsView() {
             <tbody>
               {subscriptions.map((sub) => (
                 <tr key={sub.id} className={sub.isActive ? "row-debit" : ""}>
-                  <td>{sub.name}</td><td className="value-warning">{money(sub.cost)}</td><td>{sub.frequency}</td><td>{sub.nextDueDate}</td><td>{sub.category}</td>
-                  <td><button className="danger-btn" onClick={() => void deleteSubscription(sub.id)}>Delete</button></td>
+                  <td>
+                    <div className="entity-with-image">
+                      {sub.imageDataUrl ? <img src={sub.imageDataUrl} alt={sub.name} className="entity-thumb" /> : <span className="entity-thumb entity-thumb-fallback">S</span>}
+                      <span>{sub.name}</span>
+                    </div>
+                  </td>
+                  <td className="value-warning">{money(sub.cost)}</td>
+                  <td>{sub.frequency}</td>
+                  <td>{sub.nextDueDate}</td>
+                  <td>{sub.category}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button type="button" onClick={() => setForm(sub)}>Edit</button>
+                      <button className="danger-btn" onClick={() => void onDelete(sub)}>Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </article>
+      {status ? <p className="muted">{status}</p> : null}
     </section>
   );
 }
