@@ -44,6 +44,23 @@ export async function refreshHostedAccessToken() {
   return data.session?.access_token ?? null;
 }
 
+async function formatHostedFunctionError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return "Edge function call failed.";
+  }
+  const maybeContext = (error as { context?: { status?: number; text?: () => Promise<string> } }).context;
+  if (!maybeContext || typeof maybeContext.text !== "function") {
+    return error.message;
+  }
+  try {
+    const body = await maybeContext.text();
+    const statusPart = typeof maybeContext.status === "number" ? `${maybeContext.status}` : "unknown";
+    return `Edge function error ${statusPart}: ${body || error.message}`;
+  } catch {
+    return error.message;
+  }
+}
+
 export async function invokeHostedFunction<T>(name: string, payload?: Record<string, unknown>) {
   if (!supabase) {
     throw new Error("Hosted auth is not configured for this build.");
@@ -60,7 +77,7 @@ export async function invokeHostedFunction<T>(name: string, payload?: Record<str
     }));
   }
   if (error) {
-    throw new Error(error.message);
+    throw new Error(await formatHostedFunctionError(error));
   }
   return data as T;
 }
