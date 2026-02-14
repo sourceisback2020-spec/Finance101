@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { bankBalanceSeries, localIsoDate, transactionDeltaByAccount } from "../../domain/calculations";
 import { db } from "../../data/db";
+import { getHostedAuthDebug } from "../../data/supabaseAuth";
 import type { BankAccount } from "../../domain/models";
 import { useFinanceStore } from "../../state/store";
 import { normalizeUploadImage } from "../../ui/images/imageTools";
@@ -48,6 +49,7 @@ export function BanksView() {
   const [quickMode, setQuickMode] = useState<"add" | "subtract">("add");
   const [status, setStatus] = useState<string | null>(null);
   const [bankFeedStatus, setBankFeedStatus] = useState<string | null>(null);
+  const [bankFeedAuthDebug, setBankFeedAuthDebug] = useState<string | null>(null);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [simpleFinSetupToken, setSimpleFinSetupToken] = useState("");
   const [isSyncingFeed, setIsSyncingFeed] = useState(false);
@@ -176,6 +178,31 @@ export function BanksView() {
     void loadLinkToken();
   }, [bankFeedEnabled, isPlaidFeed, loadLinkToken]);
 
+  useEffect(() => {
+    if (!bankFeedEnabled) {
+      setBankFeedAuthDebug(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const info = await getHostedAuthDebug();
+        if (!info.enabled) {
+          setBankFeedAuthDebug("Auth debug: hosted auth disabled in this build.");
+          return;
+        }
+        const expiryText =
+          typeof info.expiresInSeconds === "number"
+            ? `${Math.max(0, Math.round(info.expiresInSeconds / 60))}m remaining`
+            : "unknown expiry";
+        setBankFeedAuthDebug(
+          `Auth debug: user=${info.userId ?? "none"} | issuer=${info.issuer ?? "none"} | ${expiryText}`
+        );
+      } catch (error) {
+        setBankFeedAuthDebug(error instanceof Error ? `Auth debug error: ${error.message}` : "Auth debug unavailable.");
+      }
+    })();
+  }, [bankFeedEnabled, bankFeedStatus]);
+
   async function connectSimpleFin() {
     const setupToken = simpleFinSetupToken.trim();
     if (!setupToken) return;
@@ -281,6 +308,7 @@ export function BanksView() {
             </div>
           )}
           {bankFeedStatus ? <p className="muted">{bankFeedStatus}</p> : null}
+          {bankFeedAuthDebug ? <p className="muted">{bankFeedAuthDebug}</p> : null}
         </article>
       ) : null}
 

@@ -37,6 +37,30 @@ export async function getHostedAccessToken() {
   return session?.access_token ?? null;
 }
 
+export async function getHostedAuthDebug() {
+  if (!supabase) {
+    return {
+      enabled: false,
+      userId: null,
+      issuer: null,
+      expiresAt: null,
+      expiresInSeconds: null
+    };
+  }
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token ?? null;
+  const payload = token ? decodeJwtPayload(token) : null;
+  const exp = typeof payload?.exp === "number" ? payload.exp : null;
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    enabled: true,
+    userId: data.session?.user?.id ?? null,
+    issuer: typeof payload?.iss === "string" ? payload.iss : null,
+    expiresAt: exp ? new Date(exp * 1000).toISOString() : null,
+    expiresInSeconds: exp ? exp - now : null
+  };
+}
+
 export async function refreshHostedAccessToken() {
   if (!supabase) return null;
   const { data, error } = await supabase.auth.refreshSession();
