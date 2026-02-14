@@ -61,6 +61,35 @@ async function formatHostedFunctionError(error: unknown) {
   }
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+    const decoded = atob(padded);
+    return JSON.parse(decoded) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function validateHostedJwt(token: string) {
+  const payload = decodeJwtPayload(token);
+  if (!payload) {
+    throw new Error("Your session token is malformed. Please sign out, reset session, and sign back in.");
+  }
+  const expectedIss = `${HOSTED_URL.replace(/\/+$/, "")}/auth/v1`;
+  const iss = typeof payload.iss === "string" ? payload.iss : "";
+  if (iss && iss !== expectedIss) {
+    throw new Error(`Session token project mismatch. Expected issuer ${expectedIss} but got ${iss}. Please sign out, reset session, and sign back in.`);
+  }
+  const exp = typeof payload.exp === "number" ? payload.exp : 0;
+  if (exp > 0 && Date.now() / 1000 >= exp) {
+    throw new Error("Your session token is expired. Please sign out, reset session, and sign back in.");
+  }
+}
+
 export async function invokeHostedFunction<T>(name: string, payload?: Record<string, unknown>) {
   if (!supabase) {
     throw new Error("Hosted auth is not configured for this build.");
@@ -70,17 +99,18 @@ export async function invokeHostedFunction<T>(name: string, payload?: Record<str
   const requestBody = JSON.stringify(payload ?? {});
 
   async function requestWithFreshToken(forceRefresh: boolean) {
-    if (forceRefresh) {
-      await client.auth.refreshSession();
-    } else {
-      // Keep tokens warm for long-running tabs.
-      await client.auth.refreshSession();
+    const refreshResult = await client.auth.refreshSession();
+    if (refreshResult.error && forceRefresh) {
+      throw new Error("Session refresh failed. Please sign out, reset session, and sign back in.");
     }
-    const { data } = await client.auth.getSession();
-    const token = data.session?.access_token ?? null;
+    const token =
+      refreshResult.data.session?.access_token ??
+      (await client.auth.getSession()).data.session?.access_token ??
+      null;
     if (!token || token.split(".").length !== 3) {
       throw new Error("Your session token is invalid. Please sign out, reset session, and sign back in.");
     }
+    validateHostedJwt(token);
 
     const response = await fetch(endpoint, {
       method: "POST",
