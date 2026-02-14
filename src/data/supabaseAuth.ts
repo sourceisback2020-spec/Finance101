@@ -65,21 +65,55 @@ export async function invokeHostedFunction<T>(name: string, payload?: Record<str
   if (!supabase) {
     throw new Error("Hosted auth is not configured for this build.");
   }
-  // Refresh once before invoke so edge gateway gets a current JWT.
-  await supabase.auth.refreshSession();
-  let { data, error } = await supabase.functions.invoke(name, {
-    body: payload ?? {}
-  });
-  if (error && /invalid jwt/i.test(error.message ?? "")) {
-    await supabase.auth.refreshSession();
-    ({ data, error } = await supabase.functions.invoke(name, {
-      body: payload ?? {}
-    }));
+  const client = supabase;
+  const endpoint = `${HOSTED_URL.replace(/\/+$/, "")}/functions/v1/${name}`;
+  const requestBody = JSON.stringify(payload ?? {});
+
+  async function requestWithFreshToken(forceRefresh: boolean) {
+    if (forceRefresh) {
+      await client.auth.refreshSession();
+    } else {
+      // Keep tokens warm for long-running tabs.
+      await client.auth.refreshSession();
+    }
+    const { data } = await client.auth.getSession();
+    const token = data.session?.access_token ?? null;
+    if (!token || token.split(".").length !== 3) {
+      throw new Error("Your session token is invalid. Please sign out, reset session, and sign back in.");
+    }
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        apikey: HOSTED_ANON_KEY,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: requestBody
+    });
+
+    const rawText = await response.text();
+    if (!response.ok) {
+      if (!forceRefresh && response.status === 401 && /invalid jwt/i.test(rawText)) {
+        return requestWithFreshToken(true);
+      }
+      throw new Error(`Edge function error ${response.status}: ${rawText || "No response body"}`);
+    }
+    if (!rawText) {
+      return {} as T;
+    }
+    try {
+      return JSON.parse(rawText) as T;
+    } catch {
+      throw new Error(`Edge function returned invalid JSON: ${rawText}`);
+    }
   }
-  if (error) {
+
+  try {
+    return await requestWithFreshToken(false);
+  } catch (error) {
     throw new Error(await formatHostedFunctionError(error));
   }
-  return data as T;
 }
 
 export async function signInHosted(email: string, password: string) {
