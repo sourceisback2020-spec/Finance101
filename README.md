@@ -29,6 +29,8 @@ The app auto-uses hosted mode when `VITE_DATA_PROVIDER=hosted` and Supabase env 
 2. Open SQL editor.
 3. Run the SQL from:
    - `src/data/migrations/hosted_supabase.sql`
+4. If using bank-feed sync, also run:
+   - `src/data/migrations/hosted_bank_feed.sql`
 
 ### Step B: Configure environment
 
@@ -78,6 +80,51 @@ dist
 ```
 
 Set the same `VITE_*` variables in your hosting provider.
+
+## Realtime bank feeds (SimpleFIN or Plaid, hosted mode)
+
+This app supports secure, server-side bank sync for balances + transactions.
+
+### Frontend env (`.env.local`, Cloudflare Pages env)
+
+```env
+VITE_BANK_FEED_PROVIDER=simplefin
+# optional override; default uses ${VITE_SUPABASE_URL}/functions/v1
+VITE_SUPABASE_FUNCTIONS_URL=https://YOUR_PROJECT_ID.supabase.co/functions/v1
+```
+
+### Supabase Edge Function secrets
+
+Set these in Supabase project settings for functions:
+
+- `BANK_FEED_TOKEN_KEY` (base64-encoded 32-byte key for AES encryption at rest)
+
+If using **SimpleFIN**:
+- no provider credentials required
+- users paste a SimpleFIN setup token from `https://bridge.simplefin.org/simplefin/create`
+
+If using **Plaid**:
+- `PLAID_CLIENT_ID`
+- `PLAID_SECRET`
+- `PLAID_ENV` (`sandbox`, `development`, or `production`)
+- `PLAID_WEBHOOK_URL` (optional but recommended, points to `bank-feed-webhook`)
+- `BANK_FEED_WEBHOOK_SECRET` (optional, recommended query-secret gate)
+
+### Deploy Edge Functions
+
+```bash
+supabase functions deploy bank-feed-link-token
+supabase functions deploy bank-feed-exchange
+supabase functions deploy bank-feed-connect-simplefin
+supabase functions deploy bank-feed-sync
+supabase functions deploy bank-feed-webhook
+```
+
+### Security model
+
+- Access URLs / provider tokens are encrypted and stored server-side only
+- App writes imported transactions into your existing `finance_records` store
+- Supabase auth + owner-based RLS still governs visible data
 
 ## Data provider switching
 

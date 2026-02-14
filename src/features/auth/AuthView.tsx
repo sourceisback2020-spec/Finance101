@@ -4,12 +4,13 @@ type Props = {
   error: string | null;
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignUp: (email: string, password: string) => Promise<void>;
+  onResetSession: () => Promise<void>;
 };
 
-export function AuthView({ error, onSignIn, onSignUp }: Props) {
+export function AuthView({ error, onSignIn, onSignUp, onResetSession }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState<null | "signin" | "signup">(null);
+  const [loading, setLoading] = useState<null | "signin" | "signup" | "reset">(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const formValid = useMemo(() => email.trim().length > 0 && password.length >= 6, [email, password]);
@@ -30,6 +31,17 @@ export function AuthView({ error, onSignIn, onSignUp }: Props) {
     try {
       await onSignUp(email.trim(), password);
       setStatus("Account created. If email confirmation is enabled, verify your email, then sign in.");
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleResetSession = async () => {
+    setLoading("reset");
+    setStatus(null);
+    try {
+      await onResetSession();
+      setStatus("Session reset complete. Sign in again now.");
     } finally {
       setLoading(null);
     }
@@ -67,6 +79,9 @@ export function AuthView({ error, onSignIn, onSignUp }: Props) {
           <button className="secondary-btn" type="button" disabled={!formValid || loading !== null} onClick={() => void handleSignUp()}>
             {loading === "signup" ? "Creating..." : "Create Account"}
           </button>
+          <button className="secondary-btn" type="button" disabled={loading !== null} onClick={() => void handleResetSession()}>
+            {loading === "reset" ? "Resetting..." : "Reset Session"}
+          </button>
         </div>
         {status ? <p className="muted">{status}</p> : null}
         {error ? <p className="auth-error">{error}</p> : null}
@@ -74,5 +89,7 @@ export function AuthView({ error, onSignIn, onSignUp }: Props) {
     </div>
   );
 }
+
+
 
 

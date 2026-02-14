@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePlaidLink } from "react-plaid-link";
 import {
   Bar,
   BarChart,
@@ -11,6 +12,7 @@ import {
   YAxis
 } from "recharts";
 import { bankBalanceSeries, localIsoDate, transactionDeltaByAccount } from "../../domain/calculations";
+import { db } from "../../data/db";
 import type { BankAccount } from "../../domain/models";
 import { useFinanceStore } from "../../state/store";
 import { normalizeUploadImage } from "../../ui/images/imageTools";
@@ -27,8 +29,10 @@ const initialState: BankAccount = {
   imageDataUrl: ""
 };
 
-function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+function money(value: number | null | undefined) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+    Number(value ?? 0)
+  );
 }
 
 export function BanksView() {
@@ -37,16 +41,38 @@ export function BanksView() {
   const upsertBank = useFinanceStore((state) => state.upsertBank);
   const upsertTransaction = useFinanceStore((state) => state.upsertTransaction);
   const deleteBank = useFinanceStore((state) => state.deleteBank);
+  const refreshAll = useFinanceStore((state) => state.refreshAll);
   const [form, setForm] = useState<BankAccount>(initialState);
   const [quickBankId, setQuickBankId] = useState("");
   const [quickAmount, setQuickAmount] = useState(0);
   const [quickMode, setQuickMode] = useState<"add" | "subtract">("add");
   const [status, setStatus] = useState<string | null>(null);
+  const [bankFeedStatus, setBankFeedStatus] = useState<string | null>(null);
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [simpleFinSetupToken, setSimpleFinSetupToken] = useState("");
+  const [isSyncingFeed, setIsSyncingFeed] = useState(false);
+  const [isConnectingFeed, setIsConnectingFeed] = useState(false);
+  const bankFeedProvider = db.getBankFeedProvider();
+  const bankFeedEnabled = db.isBankFeedEnabled();
+  const isPlaidFeed = bankFeedProvider === "plaid";
+  const isSimpleFinFeed = bankFeedProvider === "simplefin";
   const isEditing = Boolean(form.id);
-  const balanceSeries = bankBalanceSeries(banks);
-  const hasTimeline = balanceSeries.length >= 2;
   const today = localIsoDate();
-  const postedByAccount = useMemo(() => transactionDeltaByAccount(transactions, today), [transactions, today]);
+  const postedByAccount = useMemo(
+    () => transactionDeltaByAccount(transactions, today, { includeImported: false }),
+    [transactions, today]
+  );
+  const balanceSeries = useMemo(
+    () =>
+      bankBalanceSeries(
+        banks.map((bank) => ({
+          ...bank,
+          currentBalance: bank.currentBalance + (postedByAccount.get(bank.id) ?? 0)
+        }))
+      ),
+    [banks, postedByAccount]
+  );
+  const hasTimeline = balanceSeries.length >= 2;
   const pendingByAccount = useMemo(
     () =>
       transactions
@@ -95,6 +121,78 @@ export function BanksView() {
     setQuickAmount(0);
   }
 
+  const loadLinkToken = useCallback(async () => {
+    if (!bankFeedEnabled || !isPlaidFeed) return;
+    try {
+      const result = await db.createBankFeedLinkToken();
+      setLinkToken(result.linkToken);
+    } catch (error) {
+      setBankFeedStatus(error instanceof Error ? error.message : "Could not create secure bank link token.");
+    }
+  }, [bankFeedEnabled, isPlaidFeed]);
+
+  async function syncFeed() {
+    if (!bankFeedEnabled) return;
+    setIsSyncingFeed(true);
+    setBankFeedStatus("Syncing transactions...");
+    try {
+      const result = await db.syncBankFeedTransactions();
+      await refreshAll();
+      setBankFeedStatus(
+        `Sync complete: +${result.added} added, ${result.modified} updated, ${result.removed} removed across ${result.connections} connection(s).`
+      );
+    } catch (error) {
+      setBankFeedStatus(error instanceof Error ? error.message : "Could not sync bank feed transactions.");
+    } finally {
+      setIsSyncingFeed(false);
+    }
+  }
+
+  const { open: openPlaid, ready: plaidReady } = usePlaidLink({
+    token: isPlaidFeed ? linkToken : null,
+    onSuccess: (publicToken) => {
+      void (async () => {
+        setBankFeedStatus("Connecting bank account...");
+        try {
+          const connected = await db.exchangeBankFeedPublicToken(publicToken);
+          setBankFeedStatus(
+            `Connected ${connected.institutionName}. Linked ${connected.accountsLinked} account(s). Running first sync...`
+          );
+          await syncFeed();
+          await loadLinkToken();
+        } catch (error) {
+          setBankFeedStatus(error instanceof Error ? error.message : "Could not connect bank account.");
+        }
+      })();
+    },
+    onExit: (error) => {
+      if (!error) return;
+      setBankFeedStatus(error.error_message || "Bank linking canceled.");
+    }
+  });
+
+  useEffect(() => {
+    if (!bankFeedEnabled || !isPlaidFeed) return;
+    void loadLinkToken();
+  }, [bankFeedEnabled, isPlaidFeed, loadLinkToken]);
+
+  async function connectSimpleFin() {
+    const setupToken = simpleFinSetupToken.trim();
+    if (!setupToken) return;
+    setIsConnectingFeed(true);
+    setBankFeedStatus("Connecting SimpleFIN bridge...");
+    try {
+      const connected = await db.connectSimpleFinBridge(setupToken);
+      setBankFeedStatus(`Connected ${connected.institutionName}. Linked ${connected.accountsLinked} account(s). Running first sync...`);
+      setSimpleFinSetupToken("");
+      await syncFeed();
+    } catch (error) {
+      setBankFeedStatus(error instanceof Error ? error.message : "Could not connect SimpleFIN bridge.");
+    } finally {
+      setIsConnectingFeed(false);
+    }
+  }
+
   const totalBankCash = banks.reduce((sum, account) => sum + account.currentBalance + (postedByAccount.get(account.id) ?? 0), 0);
   const totalPending = banks.reduce((sum, account) => sum + (pendingByAccount.get(account.id) ?? 0), 0);
   const largestLive = [...banks]
@@ -135,6 +233,56 @@ export function BanksView() {
         <article className="kpi-card"><h3>Pending Activity</h3><strong className={totalPending >= 0 ? "value-positive" : "value-negative"}>{money(totalPending)}</strong></article>
         <article className="kpi-card"><h3>Largest Account</h3><strong>{largestLive ? `${largestLive.nickname}: ${money(largestLive.live)}` : "-"}</strong></article>
       </div>
+
+      {bankFeedEnabled ? (
+        <article className="panel">
+          <div className="panel-head">
+            <h3>Realtime Bank Feed</h3>
+            <strong className="value-positive">
+              {isSimpleFinFeed ? "SimpleFIN Connected Sync" : "Plaid Connected Sync"}
+            </strong>
+          </div>
+          <p className="muted">Securely import posted bank transactions and balances from your connected institution. Tokens are never stored in the browser.</p>
+          {isSimpleFinFeed ? (
+            <>
+              <p className="muted">
+                First get your SimpleFIN setup token at{" "}
+                <a href="https://bridge.simplefin.org/simplefin/create" target="_blank" rel="noreferrer">
+                  bridge.simplefin.org/simplefin/create
+                </a>
+                , then paste it below.
+              </p>
+              <label>
+                SimpleFIN Setup Token
+                <textarea
+                  rows={3}
+                  value={simpleFinSetupToken}
+                  onChange={(event) => setSimpleFinSetupToken(event.target.value)}
+                  placeholder="Paste your SimpleFIN setup token"
+                />
+              </label>
+              <div className="row-actions">
+                <button type="button" onClick={() => void connectSimpleFin()} disabled={isConnectingFeed || simpleFinSetupToken.trim().length === 0}>
+                  {isConnectingFeed ? "Connecting..." : "Connect SimpleFIN"}
+                </button>
+                <button type="button" onClick={() => void syncFeed()} disabled={isSyncingFeed}>
+                  {isSyncingFeed ? "Syncing..." : "Sync Now"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="row-actions">
+              <button type="button" onClick={() => openPlaid()} disabled={!plaidReady || !linkToken}>
+                Connect Bank Account
+              </button>
+              <button type="button" onClick={() => void syncFeed()} disabled={isSyncingFeed}>
+                {isSyncingFeed ? "Syncing..." : "Sync Now"}
+              </button>
+            </div>
+          )}
+          {bankFeedStatus ? <p className="muted">{bankFeedStatus}</p> : null}
+        </article>
+      ) : null}
 
       <article className="panel">
         <h3>{isEditing ? "Edit Bank Account" : "Add Bank Account"}</h3>
@@ -194,7 +342,7 @@ export function BanksView() {
                 <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip
-                  formatter={(value: number) => money(value)}
+                  formatter={(value) => money(typeof value === "number" ? value : Number(value))}
                   contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
                 />
                 <Bar dataKey="live" fill="#56c7ff" radius={[0, 8, 8, 0]} barSize={18} isAnimationActive={false} />
@@ -213,7 +361,7 @@ export function BanksView() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                 <XAxis dataKey="date" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                 <Line type="monotone" dataKey="total" stroke="#56c7ff" dot={false} strokeWidth={2.5} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>

@@ -3,5 +3,8 @@ SQLite migrations are currently bootstrap-based inside `electron/main.ts`.
 Hosted web deployments can use `hosted_supabase.sql` in this folder.
 Run that SQL in the Supabase SQL editor before enabling hosted mode.
 
+If enabling realtime hosted bank feeds, also run:
+- `hosted_bank_feed.sql`
+
 
 

@@ -136,7 +136,7 @@ function createWindow() {
         }
     });
     if (isDev) {
-        const devUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5273";
+        const devUrl = process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5381";
         win.loadURL(devUrl);
     }
     else {

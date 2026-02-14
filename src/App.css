@@ -613,6 +613,22 @@ button:hover {
   width: min(360px, 100%);
 }
 
+.panel-collapse-btn {
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel[data-collapsed="true"] .panel-collapse-target {
+  display: none;
+}
+
 .table-wrap {
   overflow-x: auto;
   overscroll-behavior-x: contain;

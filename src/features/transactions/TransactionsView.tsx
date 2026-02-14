@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -14,13 +14,17 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { cashflowSeries, localIsoDate, monthlyCandlestickSeries, runningBalanceSeries } from "../../domain/calculations";
+import { cashflowSeries, cashflowTransactions, localIsoDate, monthlyCandlestickSeries, postedTransactionsAsOf, transactionDeltaByAccount } from "../../domain/calculations";
 import type { Transaction } from "../../domain/models";
 import { parseTransactionsCsv } from "../../services/importExport/csv";
 import { useFinanceStore } from "../../state/store";
 
 type ChartRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 type PrimaryChartMode = "line" | "area" | "candles";
+type TransactionScope = "all" | "manual" | "imported";
+type TransactionTypeFilter = "all" | "income" | "expense";
+const IMPORT_CUTOFF_DATE = "2026-02-01";
+const TRANSACTIONS_PAGE_SIZE = 18;
 
 function getInitialState(defaultAccount = "unassigned"): Transaction {
   return {
@@ -46,6 +50,10 @@ function valueClass(value: number) {
   return "value-neutral";
 }
 
+function isImportedTransaction(transaction: Transaction) {
+  return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
+}
+
 function rangeStart(range: ChartRange, todayIso: string) {
   if (range === "ALL") return null;
   const today = new Date(`${todayIso}T00:00:00`);
@@ -68,19 +76,102 @@ export function TransactionsView() {
   const [showIncome, setShowIncome] = useState(true);
   const [showExpense, setShowExpense] = useState(true);
   const [showNet, setShowNet] = useState(true);
+  const [transactionScope, setTransactionScope] = useState<TransactionScope>("all");
+  const [typeFilter, setTypeFilter] = useState<TransactionTypeFilter>("all");
+  const [accountFilter, setAccountFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [fromDate, setFromDate] = useState(IMPORT_CUTOFF_DATE);
+  const [toDate, setToDate] = useState("");
+  const [page, setPage] = useState(0);
   const isEditing = Boolean(form.id);
 
-  const filtered = useMemo(
-    () =>
-      manualTransactions.filter((tx) =>
-        `${tx.category} ${tx.merchant} ${tx.note}`.toLowerCase().includes(query.toLowerCase())
-      ),
-    [manualTransactions, query]
-  );
-  const monthlySeries = useMemo(() => cashflowSeries(transactions), [transactions]);
-  const candleSeries = useMemo(() => monthlyCandlestickSeries(transactions), [transactions]);
-  const balanceSeries = useMemo(() => runningBalanceSeries(transactions), [transactions]);
+  const categoryOptions = useMemo(() => {
+    const values = new Set<string>();
+    manualTransactions.forEach((tx) => values.add(tx.category));
+    return [...values].sort((a, b) => a.localeCompare(b));
+  }, [manualTransactions]);
+
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.toLowerCase();
+    return manualTransactions
+      .filter((tx) => tx.date >= IMPORT_CUTOFF_DATE || !isImportedTransaction(tx))
+      .filter((tx) => {
+        if (transactionScope === "manual") return !isImportedTransaction(tx);
+        if (transactionScope === "imported") return isImportedTransaction(tx);
+        return true;
+      })
+      .filter((tx) => (typeFilter === "all" ? true : tx.type === typeFilter))
+      .filter((tx) => (accountFilter === "all" ? true : tx.account === accountFilter))
+      .filter((tx) => (categoryFilter === "all" ? true : tx.category === categoryFilter))
+      .filter((tx) => (fromDate ? tx.date >= fromDate : true))
+      .filter((tx) => (toDate ? tx.date <= toDate : true))
+      .filter((tx) => `${tx.date} ${tx.category} ${tx.merchant} ${tx.note}`.toLowerCase().includes(normalizedQuery))
+      .sort((a, b) => {
+        const dateSort = b.date.localeCompare(a.date);
+        if (dateSort !== 0) return dateSort;
+        const importedSort = Number(isImportedTransaction(b)) - Number(isImportedTransaction(a));
+        if (importedSort !== 0) return importedSort;
+        return b.id.localeCompare(a.id);
+      });
+  }, [manualTransactions, query, transactionScope, typeFilter, accountFilter, categoryFilter, fromDate, toDate]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [query, transactionScope, typeFilter, accountFilter, categoryFilter, fromDate, toDate]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TRANSACTIONS_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pagedTransactions = useMemo(() => {
+    const start = currentPage * TRANSACTIONS_PAGE_SIZE;
+    return filtered.slice(start, start + TRANSACTIONS_PAGE_SIZE);
+  }, [filtered, currentPage]);
+
+  const heatmapRows = useMemo(() => {
+    const map = new Map<string, { income: number; expense: number; count: number }>();
+    filtered.forEach((tx) => {
+      const row = map.get(tx.category) ?? { income: 0, expense: 0, count: 0 };
+      if (tx.type === "income") row.income += tx.amount;
+      if (tx.type === "expense") row.expense += tx.amount;
+      row.count += 1;
+      map.set(tx.category, row);
+    });
+    return [...map.entries()]
+      .map(([category, totals]) => ({ category, ...totals }))
+      .sort((a, b) => (b.expense + b.income) - (a.expense + a.income))
+      .slice(0, 12);
+  }, [filtered]);
+  const maxHeatAmount = Math.max(1, ...heatmapRows.map((row) => Math.max(row.expense, row.income)));
+  const cashflowTx = useMemo(() => cashflowTransactions(transactions, cards), [transactions, cards]);
+  const monthlySeries = useMemo(() => cashflowSeries(cashflowTx), [cashflowTx]);
+  const candleSeries = useMemo(() => monthlyCandlestickSeries(cashflowTx), [cashflowTx]);
   const today = localIsoDate();
+  const postedCashflow = useMemo(() => postedTransactionsAsOf(cashflowTx, today), [cashflowTx, today]);
+  const postedByAccountWithoutImported = useMemo(
+    () => transactionDeltaByAccount(transactions, today, { includeImported: false }),
+    [transactions, today]
+  );
+  const liveCashAnchor = useMemo(
+    () => banks.reduce((sum, bank) => sum + bank.currentBalance + (postedByAccountWithoutImported.get(bank.id) ?? 0), 0),
+    [banks, postedByAccountWithoutImported]
+  );
+  const balanceSeries = useMemo(() => {
+    const byDate = postedCashflow.reduce<Map<string, number>>((map, tx) => {
+      const delta = tx.type === "income" ? tx.amount : -tx.amount;
+      map.set(tx.date, (map.get(tx.date) ?? 0) + delta);
+      return map;
+    }, new Map<string, number>());
+    const dailyRows = [...byDate.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, delta]) => ({ date, delta }));
+    let running = 0;
+    const cumulative = dailyRows.map((row) => {
+      running += row.delta;
+      return { date: row.date, running };
+    });
+    const lastRunning = cumulative[cumulative.length - 1]?.running ?? 0;
+    const offset = liveCashAnchor - lastRunning;
+    return cumulative.map((row) => ({ date: row.date, balance: row.running + offset }));
+  }, [postedCashflow, liveCashAnchor]);
   const scheduled = useMemo(
     () => [...transactions].filter((tx) => tx.date > today).sort((a, b) => a.date.localeCompare(b.date)),
     [transactions, today]
@@ -124,12 +215,12 @@ export function TransactionsView() {
     [cards]
   );
   const postedIncome = useMemo(
-    () => transactions.filter((tx) => tx.type === "income" && tx.date <= today).reduce((sum, tx) => sum + tx.amount, 0),
-    [transactions, today]
+    () => postedCashflow.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0),
+    [postedCashflow]
   );
   const postedExpenses = useMemo(
-    () => transactions.filter((tx) => tx.type === "expense" && tx.date <= today).reduce((sum, tx) => sum + tx.amount, 0),
-    [transactions, today]
+    () => postedCashflow.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0),
+    [postedCashflow]
   );
   const pendingNet = useMemo(
     () => scheduled.reduce((sum, tx) => sum + (tx.type === "income" ? tx.amount : -tx.amount), 0),
@@ -149,8 +240,9 @@ export function TransactionsView() {
   async function onCsvImport(file: File) {
     const text = await file.text();
     const rows = parseTransactionsCsv(text);
-    if (rows.length > 0) {
-      await bulkInsert(rows);
+    const rowsInRange = rows.filter((row) => row.date >= IMPORT_CUTOFF_DATE);
+    if (rowsInRange.length > 0) {
+      await bulkInsert(rowsInRange);
     }
   }
 
@@ -264,7 +356,7 @@ export function TransactionsView() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                       <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
                       {showIncome && <Area type="monotone" dataKey="income" stroke="#56d3a1" fill="rgba(86,211,161,0.2)" strokeWidth={2} isAnimationActive={false} />}
                       {showExpense && <Area type="monotone" dataKey="expense" stroke="#ff8a92" fill="rgba(255,138,146,0.2)" strokeWidth={2} isAnimationActive={false} />}
@@ -275,7 +367,7 @@ export function TransactionsView() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                       <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
                       {showIncome && <Line type="monotone" dataKey="income" stroke="#56d3a1" dot={false} strokeWidth={2} isAnimationActive={false} />}
                       {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />}
@@ -296,7 +388,7 @@ export function TransactionsView() {
                       />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip
-                        formatter={(value: number) => money(value)}
+                        formatter={(value) => money(typeof value === "number" ? value : Number(value))}
                         contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
                         labelFormatter={(label) => filteredCandleSeries.find((point) => point.idx === Number(label))?.month ?? ""}
                       />
@@ -329,7 +421,7 @@ export function TransactionsView() {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                       <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
                       {showIncome && <Line type="monotone" dataKey="income" stroke="#56d3a1" dot={false} strokeWidth={2} isAnimationActive={false} />}
                       {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />}
@@ -350,7 +442,7 @@ export function TransactionsView() {
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                     <XAxis dataKey="date" hide={filteredBalanceSeries.length > 14} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                    <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                     <Line type="monotone" dataKey="balance" stroke="#ffb26b" dot={false} strokeWidth={2.5} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -401,8 +493,114 @@ export function TransactionsView() {
 
       <article className="panel">
         <div className="panel-head">
+          <h3>Transaction Heatmap (Category x Type)</h3>
+          <strong>Top {heatmapRows.length} categories</strong>
+        </div>
+        {heatmapRows.length === 0 ? (
+          <div className="chart-empty">No transactions in this filter range yet.</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th><th>Expense</th><th>Income</th><th>Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {heatmapRows.map((row) => {
+                  const expenseAlpha = Math.min(0.75, row.expense / maxHeatAmount);
+                  const incomeAlpha = Math.min(0.75, row.income / maxHeatAmount);
+                  return (
+                    <tr key={row.category}>
+                      <td>{row.category}</td>
+                      <td
+                        style={{ background: `rgba(255,138,146,${expenseAlpha})` }}
+                        className={row.expense > 0 ? "value-negative" : "value-neutral"}
+                      >
+                        {money(row.expense)}
+                      </td>
+                      <td
+                        style={{ background: `rgba(86,211,161,${incomeAlpha})` }}
+                        className={row.income > 0 ? "value-positive" : "value-neutral"}
+                      >
+                        {money(row.income)}
+                      </td>
+                      <td>{row.count}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </article>
+
+      <article className="panel">
+        <div className="panel-head">
           <h3>Transactions ({filtered.length})</h3>
-          <input placeholder="Search category, merchant, notes..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <div className="chart-toolbar">
+            <div className="toggle-group">
+              {(["all", "manual", "imported"] as TransactionScope[]).map((scope) => (
+                <button
+                  key={scope}
+                  className={`chip-btn ${transactionScope === scope ? "active-chip" : ""}`}
+                  onClick={() => setTransactionScope(scope)}
+                >
+                  {scope === "all" ? "All" : scope === "manual" ? "Manual" : "Imported"}
+                </button>
+              ))}
+            </div>
+            <input placeholder="Search date, category, merchant, notes..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-grid">
+          <label>
+            Type
+            <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as TransactionTypeFilter)}>
+              <option value="all">All</option>
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+            </select>
+          </label>
+          <label>
+            Account
+            <select value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)}>
+              <option value="all">All accounts</option>
+              <optgroup label="Bank Accounts">
+                {banks.map((bank) => (
+                  <option key={bank.id} value={bank.id}>
+                    {bank.institution} - {bank.nickname}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Credit Cards">
+                {cards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    Card - {card.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </label>
+          <label>
+            Category
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+              <option value="all">All categories</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            From
+            <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+          </label>
+          <label>
+            To
+            <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+          </label>
         </div>
         <div className="table-wrap">
           <table>
@@ -412,7 +610,7 @@ export function TransactionsView() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((tx) => (
+              {pagedTransactions.map((tx) => (
                 <tr key={tx.id} className={tx.type === "income" ? "row-income" : "row-expense"}>
                   <td>{tx.date}</td>
                   <td className={tx.type === "income" ? "value-positive" : "value-negative"}>{tx.type}</td>
@@ -430,6 +628,15 @@ export function TransactionsView() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="row-actions">
+          <strong>Page {currentPage + 1} / {totalPages}</strong>
+          <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={currentPage === 0}>
+            Previous
+          </button>
+          <button type="button" onClick={() => setPage((value) => Math.min(totalPages - 1, value + 1))} disabled={currentPage >= totalPages - 1}>
+            Next
+          </button>
         </div>
       </article>
     </section>

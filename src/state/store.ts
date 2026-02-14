@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { db } from "../data/db";
 import {
   byCategory,
+  cashflowTransactions,
   calculateDashboardMetrics,
   cashflowSeries,
   evaluateScenario,
@@ -13,6 +14,16 @@ import type { CreditCard, DashboardMetrics, RetirementEntry, Scenario, Subscript
 import type { BankAccount, UiPreferences } from "../domain/models";
 
 type AppView = "dashboard" | "transactions" | "subscriptions" | "cards" | "banks" | "scenarios" | "retirement" | "customize";
+const IMPORT_CUTOFF_DATE = "2026-02-01";
+
+function isImportedTransaction(transaction: Transaction) {
+  return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
+}
+
+function isAllowedImportedDate(transaction: Transaction) {
+  if (!isImportedTransaction(transaction)) return true;
+  return transaction.date >= IMPORT_CUTOFF_DATE;
+}
 
 type Store = {
   view: AppView;
@@ -82,7 +93,7 @@ export const useFinanceStore = create<Store>((set, get) => ({
   setView: (view) => set({ view }),
   refreshAll: async () => {
     set({ loading: true });
-    const [manualTransactions, subscriptions, cards, banks, scenarios, retirementEntries, uiPreferences] = await Promise.all([
+    const [rawManualTransactions, subscriptions, cards, banks, scenarios, retirementEntries, uiPreferences] = await Promise.all([
       db.listTransactions(),
       db.listSubscriptions(),
       db.listCards(),
@@ -91,6 +102,7 @@ export const useFinanceStore = create<Store>((set, get) => ({
       db.listRetirementEntries(),
       db.getUiPreferences()
     ]);
+    const manualTransactions = rawManualTransactions.filter(isAllowedImportedDate);
     const normalizedScenarios = scenarios.map((scenario) => ({
       ...scenario,
       accountId: scenario.accountId ?? "unassigned",
@@ -195,12 +207,10 @@ export function useDashboardData() {
   const cards = useFinanceStore((state) => state.cards);
   const metrics = useFinanceStore((state) => state.metrics);
   const today = localIsoDate();
-  const postedTransactions = postedTransactionsAsOf(transactions, today);
-  const cardIds = new Set(cards.map((card) => card.id));
-  const postedCashflowTransactions = postedTransactions.filter((tx) => !cardIds.has(tx.account));
+  const postedTransactions = postedTransactionsAsOf(cashflowTransactions(transactions, cards), today);
   return {
-    categorySpend: byCategory(postedCashflowTransactions),
-    cashflow: cashflowSeries(postedCashflowTransactions),
+    categorySpend: byCategory(postedTransactions),
+    cashflow: cashflowSeries(postedTransactions),
     scenarioOutcomes: scenarios.map((scenario) => ({
       name: scenario.name,
       ...evaluateScenario(scenario, metrics.netCashflow, metrics.monthlySubscriptions, cards)

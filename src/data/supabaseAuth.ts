@@ -37,6 +37,34 @@ export async function getHostedAccessToken() {
   return session?.access_token ?? null;
 }
 
+export async function refreshHostedAccessToken() {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.refreshSession();
+  if (error) return null;
+  return data.session?.access_token ?? null;
+}
+
+export async function invokeHostedFunction<T>(name: string, payload?: Record<string, unknown>) {
+  if (!supabase) {
+    throw new Error("Hosted auth is not configured for this build.");
+  }
+  // Refresh once before invoke so edge gateway gets a current JWT.
+  await supabase.auth.refreshSession();
+  let { data, error } = await supabase.functions.invoke(name, {
+    body: payload ?? {}
+  });
+  if (error && /invalid jwt/i.test(error.message ?? "")) {
+    await supabase.auth.refreshSession();
+    ({ data, error } = await supabase.functions.invoke(name, {
+      body: payload ?? {}
+    }));
+  }
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data as T;
+}
+
 export async function signInHosted(email: string, password: string) {
   if (!supabase) {
     return { error: new Error("Hosted auth is not configured for this build.") };
@@ -54,6 +82,32 @@ export async function signUpHosted(email: string, password: string) {
 export async function signOutHosted() {
   if (!supabase) return;
   await supabase.auth.signOut();
+}
+
+export async function resetHostedSession() {
+  if (!supabase || !isBrowser) return;
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    // best effort
+  }
+  try {
+    const clearKeys = (storage: Storage) => {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < storage.length; i += 1) {
+        const key = storage.key(i);
+        if (!key) continue;
+        if (key.startsWith("sb-")) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((key) => storage.removeItem(key));
+    };
+    clearKeys(window.localStorage);
+    clearKeys(window.sessionStorage);
+  } catch {
+    // best effort
+  }
 }
 
 export function onHostedAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {

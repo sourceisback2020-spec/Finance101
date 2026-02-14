@@ -14,6 +14,7 @@ import {
   getHostedUser,
   isHostedAuthEnabled,
   onHostedAuthStateChange,
+  resetHostedSession,
   signInHosted,
   signOutHosted,
   signUpHosted
@@ -57,6 +58,85 @@ function App() {
     void refreshAll();
   }, [refreshAll, hostedAuthEnabled, hostedUser]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (hostedAuthEnabled && !hostedUser) return;
+
+    const storagePrefix = "finance:panelCollapsed:";
+
+    const slugify = (value: string) =>
+      value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+
+    const applyCollapsedState = (panel: HTMLElement, button: HTMLButtonElement, collapsed: boolean) => {
+      panel.dataset.collapsed = collapsed ? "true" : "false";
+      button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      button.textContent = collapsed ? "▾" : "▴";
+    };
+
+    const decoratePanels = () => {
+      const panels = document.querySelectorAll<HTMLElement>(".content .panel");
+      panels.forEach((panel, index) => {
+        if (panel.dataset.collapsibleReady === "true") return;
+
+        let header = panel.querySelector<HTMLElement>(":scope > .panel-head");
+        if (!header) {
+          const heading = panel.querySelector<HTMLElement>(":scope > h3, :scope > h2");
+          if (heading) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "panel-head panel-collapsible-head";
+            panel.insertBefore(wrapper, heading);
+            wrapper.appendChild(heading);
+            header = wrapper;
+          } else {
+            const wrapper = document.createElement("div");
+            wrapper.className = "panel-head panel-collapsible-head";
+            const title = document.createElement("h3");
+            title.textContent = "Section";
+            wrapper.appendChild(title);
+            panel.prepend(wrapper);
+            header = wrapper;
+          }
+        }
+
+        const scopeTitle = panel.closest("section")?.querySelector("header h2")?.textContent ?? "app";
+        const headingTitle = header.querySelector("h2, h3")?.textContent ?? `panel-${index}`;
+        const panelKey = `${slugify(scopeTitle)}:${slugify(headingTitle)}:${index}`;
+        panel.dataset.panelKey = panelKey;
+
+        Array.from(panel.children).forEach((child) => {
+          if (child !== header) {
+            child.classList.add("panel-collapse-target");
+          }
+        });
+
+        const toggleButton = document.createElement("button");
+        toggleButton.type = "button";
+        toggleButton.className = "panel-collapse-btn";
+        toggleButton.title = "Collapse/Expand section";
+        toggleButton.setAttribute("aria-label", "Collapse/Expand section");
+        const stored = window.localStorage.getItem(`${storagePrefix}${panelKey}`) === "1";
+        applyCollapsedState(panel, toggleButton, stored);
+        toggleButton.addEventListener("click", () => {
+          const nextCollapsed = panel.dataset.collapsed !== "true";
+          applyCollapsedState(panel, toggleButton, nextCollapsed);
+          window.localStorage.setItem(`${storagePrefix}${panelKey}`, nextCollapsed ? "1" : "0");
+        });
+        header.appendChild(toggleButton);
+
+        panel.dataset.collapsibleReady = "true";
+      });
+    };
+
+    decoratePanels();
+    const observer = new MutationObserver(() => decoratePanels());
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [hostedAuthEnabled, hostedUser, view]);
+
   const onSignIn = async (email: string, password: string) => {
     const { error } = await signInHosted(email, password);
     if (error) {
@@ -78,6 +158,12 @@ function App() {
   const onSignOut = async () => {
     await signOutHosted();
     setHostedUser(null);
+  };
+
+  const onResetSession = async () => {
+    await resetHostedSession();
+    setHostedUser(null);
+    setAuthError(null);
   };
 
   const onExportBackup = async () => {
@@ -108,7 +194,7 @@ function App() {
   }
 
   if (hostedAuthEnabled && !hostedUser) {
-    return <AuthView error={authError} onSignIn={onSignIn} onSignUp={onSignUp} />;
+    return <AuthView error={authError} onSignIn={onSignIn} onSignUp={onSignUp} onResetSession={onResetSession} />;
   }
 
   return (

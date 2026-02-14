@@ -1,5 +1,14 @@
-import type { BankAccount, CreditCard, FinanceBackup, RetirementEntry, Scenario, Subscription, Transaction, UiPreferences } from "../domain/models";
-import { getHostedAccessToken, getHostedUser } from "./supabaseAuth";
+import type {
+  BankAccount,
+  CreditCard,
+  FinanceBackup,
+  RetirementEntry,
+  Scenario,
+  Subscription,
+  Transaction,
+  UiPreferences
+} from "../domain/models";
+import { getHostedAccessToken, getHostedUser, invokeHostedFunction } from "./supabaseAuth";
 
 function hasApi() {
   return typeof window !== "undefined" && typeof window.financeApi !== "undefined";
@@ -21,6 +30,34 @@ const HOSTED_OWNER_ID_FALLBACK = import.meta.env.VITE_HOSTED_OWNER_ID ?? "solo-u
 const HOSTED_URL = import.meta.env.VITE_SUPABASE_URL?.replace(/\/+$/, "") ?? "";
 const HOSTED_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const HOSTED_MODE = import.meta.env.VITE_DATA_PROVIDER === "hosted";
+const BANK_FEED_PROVIDER = (import.meta.env.VITE_BANK_FEED_PROVIDER ?? "").toLowerCase();
+const BANK_FEED_ENABLED = BANK_FEED_PROVIDER === "plaid" || BANK_FEED_PROVIDER === "simplefin";
+type BankFeedProvider = "none" | "plaid" | "simplefin";
+
+type BankFeedLinkTokenResponse = {
+  linkToken: string;
+  expiration: string;
+};
+
+type BankFeedExchangeResponse = {
+  connectionId: string;
+  institutionName: string;
+  accountsLinked: number;
+};
+
+type SimpleFinConnectResponse = {
+  connectionId: string;
+  institutionName: string;
+  accountsLinked: number;
+};
+
+type BankFeedSyncResponse = {
+  added: number;
+  modified: number;
+  removed: number;
+  connections: number;
+  syncedAt: string;
+};
 
 function hasHostedApi() {
   if (typeof window === "undefined") return false;
@@ -528,6 +565,37 @@ export const db = {
     const next = deleteById(readList<BankAccount>("finance:banks"), id);
     writeList("finance:banks", next);
     return true;
+  },
+  getBankFeedProvider: (): BankFeedProvider => {
+    if (!hasHostedApi() || !BANK_FEED_ENABLED) return "none";
+    if (BANK_FEED_PROVIDER === "plaid") return "plaid";
+    if (BANK_FEED_PROVIDER === "simplefin") return "simplefin";
+    return "none";
+  },
+  isBankFeedEnabled: () => hasHostedApi() && BANK_FEED_ENABLED,
+  createBankFeedLinkToken: async () => {
+    if (!hasHostedApi() || !BANK_FEED_ENABLED) {
+      throw new Error("Bank feeds are only available in hosted mode.");
+    }
+    return invokeHostedFunction<BankFeedLinkTokenResponse>("bank-feed-link-token");
+  },
+  exchangeBankFeedPublicToken: async (publicToken: string) => {
+    if (!hasHostedApi() || !BANK_FEED_ENABLED) {
+      throw new Error("Bank feeds are only available in hosted mode.");
+    }
+    return invokeHostedFunction<BankFeedExchangeResponse>("bank-feed-exchange", { publicToken });
+  },
+  connectSimpleFinBridge: async (setupToken: string) => {
+    if (!hasHostedApi() || !BANK_FEED_ENABLED) {
+      throw new Error("Bank feeds are only available in hosted mode.");
+    }
+    return invokeHostedFunction<SimpleFinConnectResponse>("bank-feed-connect-simplefin", { setupToken });
+  },
+  syncBankFeedTransactions: async () => {
+    if (!hasHostedApi() || !BANK_FEED_ENABLED) {
+      throw new Error("Bank feeds are only available in hosted mode.");
+    }
+    return invokeHostedFunction<BankFeedSyncResponse>("bank-feed-sync");
   },
   getUiPreferences: async () => {
     if (hasApi()) return window.financeApi.getUiPreferences();

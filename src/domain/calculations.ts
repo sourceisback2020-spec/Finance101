@@ -15,9 +15,28 @@ export function postedTransactionsAsOf(transactions: Transaction[], asOf = local
   return transactions.filter((tx) => isPostedTransaction(tx, asOf));
 }
 
-export function transactionDeltaByAccount(transactions: Transaction[], asOf = localIsoDate()) {
+export function isImportedTransaction(transaction: Transaction) {
+  return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
+}
+
+export function cashflowTransactions(transactions: Transaction[], creditCards: CreditCard[]) {
+  const cardIds = new Set(creditCards.map((card) => card.id));
+  return transactions.filter((tx) => !cardIds.has(tx.account));
+}
+
+export function postedCashflowTransactionsAsOf(transactions: Transaction[], creditCards: CreditCard[], asOf = localIsoDate()) {
+  return postedTransactionsAsOf(cashflowTransactions(transactions, creditCards), asOf);
+}
+
+export function transactionDeltaByAccount(
+  transactions: Transaction[],
+  asOf = localIsoDate(),
+  options: { includeImported?: boolean } = {}
+) {
+  const includeImported = options.includeImported ?? true;
   const map = new Map<string, number>();
   postedTransactionsAsOf(transactions, asOf)
+    .filter((tx) => includeImported || !isImportedTransaction(tx))
     .forEach((tx) => {
       const delta = tx.type === "income" ? tx.amount : -tx.amount;
       map.set(tx.account, (map.get(tx.account) ?? 0) + delta);
@@ -60,11 +79,9 @@ export function calculateDashboardMetrics(
   retirementEntries: RetirementEntry[],
   bankAccounts: BankAccount[]
 ): DashboardMetrics {
-  const cardIds = new Set(creditCards.map((card) => card.id));
-  const postedTransactions = postedTransactionsAsOf(transactions);
-  // Cashflow metrics should represent cash movement, not new card debt.
-  const postedCashflowTransactions = postedTransactions.filter((tx) => !cardIds.has(tx.account));
+  const postedCashflowTransactions = postedCashflowTransactionsAsOf(transactions, creditCards);
   const accountDeltas = transactionDeltaByAccount(transactions);
+  const accountDeltasExcludingImported = transactionDeltaByAccount(transactions, localIsoDate(), { includeImported: false });
   const income = postedCashflowTransactions.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
   const expenses = postedCashflowTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
   const retirementBalance = retirementEntries[0]?.balance ?? 0;
@@ -74,7 +91,7 @@ export function calculateDashboardMetrics(
     netCashflow: income - expenses,
     monthlySubscriptions: calculateMonthlySubscriptionCost(subscriptions),
     totalCreditBalance: creditCards.reduce((sum, card) => sum + card.balance - (accountDeltas.get(card.id) ?? 0), 0),
-    bankCashPosition: bankAccounts.reduce((sum, account) => sum + account.currentBalance + (accountDeltas.get(account.id) ?? 0), 0),
+    bankCashPosition: bankAccounts.reduce((sum, account) => sum + account.currentBalance + (accountDeltasExcludingImported.get(account.id) ?? 0), 0),
     averageUtilizationPct: calculateUtilization(creditCards),
     retirementBalance,
     retirementProjected12m: calculateRetirementProjection(retirementEntries)
