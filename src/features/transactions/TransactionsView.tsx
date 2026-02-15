@@ -5,10 +5,10 @@ import {
   Brush,
   CartesianGrid,
   ComposedChart,
-  Customized,
   Legend,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -128,72 +128,6 @@ type CandlePoint = {
   high: number;
   low: number;
 };
-
-function CandleLayer({
-  candles,
-  xAxisMap,
-  yAxisMap
-}: {
-  candles: CandlePoint[];
-  xAxisMap?: unknown;
-  yAxisMap?: unknown;
-}) {
-  const resolveFirstAxis = (axisMap: unknown) => {
-    if (!axisMap) return null;
-    if (axisMap instanceof Map) {
-      return axisMap.values().next().value ?? null;
-    }
-    if (Array.isArray(axisMap)) return axisMap[0] ?? null;
-    return Object.values(axisMap as Record<string, unknown>)[0] ?? null;
-  };
-  const resolveScale = (axis: unknown) => {
-    const candidate = axis as { scale?: unknown };
-    if (!candidate?.scale) return null;
-    if (typeof candidate.scale === "function") return candidate.scale as (value: number) => number;
-    const nested = candidate.scale as { scale?: unknown };
-    if (typeof nested?.scale === "function") return nested.scale as (value: number) => number;
-    return null;
-  };
-
-  const xAxis = resolveFirstAxis(xAxisMap);
-  const yAxis = resolveFirstAxis(yAxisMap);
-  const xScale = resolveScale(xAxis);
-  const yScale = resolveScale(yAxis);
-  if (!xScale || !yScale || candles.length === 0) return null;
-
-  const bodyWidth = 8;
-  return (
-    <g>
-      {candles.map((candle) => {
-        const x = xScale(candle.idx);
-        const yHigh = yScale(candle.high);
-        const yLow = yScale(candle.low);
-        const yOpen = yScale(candle.open);
-        const yClose = yScale(candle.close);
-        if (![x, yHigh, yLow, yOpen, yClose].every((value) => Number.isFinite(value))) {
-          return null;
-        }
-        const isBull = candle.close >= candle.open;
-        const bodyStroke = isBull ? "#56d3a1" : "#ff8a92";
-        const bodyFill = isBull ? "rgba(86,211,161,0.35)" : "rgba(255,138,146,0.35)";
-        const isDoji = Math.abs(candle.close - candle.open) < 0.01;
-        const bodyTop = Math.min(yOpen, yClose);
-        const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
-
-        return (
-          <g key={`candle-${candle.label}-${candle.idx}`}>
-            <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={bodyStroke} strokeWidth={1.4} />
-            {isDoji ? (
-              <line x1={x - bodyWidth / 2} y1={yOpen} x2={x + bodyWidth / 2} y2={yOpen} stroke="#67b2ff" strokeWidth={2} />
-            ) : (
-              <rect x={x - bodyWidth / 2} y={bodyTop} width={bodyWidth} height={bodyHeight} fill={bodyFill} stroke={bodyStroke} />
-            )}
-          </g>
-        );
-      })}
-    </g>
-  );
-}
 
 function addDays(isoDate: string, days: number) {
   const date = new Date(`${isoDate}T00:00:00`);
@@ -687,7 +621,40 @@ export function TransactionsView() {
                         labelFormatter={(label) => cashflowCandleLabelByIdx.get(Number(label)) ?? ""}
                       />
                       <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} isAnimationActive={false} />
-                      <Customized component={(props: Record<string, unknown>) => <CandleLayer candles={cashflowCandleSeries} {...props} />} />
+                      {cashflowCandleSeries.map((candle) => (
+                        <ReferenceLine
+                          key={`wick-${candle.label}`}
+                          segment={[
+                            { x: candle.idx, y: candle.low },
+                            { x: candle.idx, y: candle.high }
+                          ]}
+                          stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
+                          strokeWidth={1.4}
+                        />
+                      ))}
+                      {cashflowCandleSeries.map((candle) =>
+                        Math.abs(candle.close - candle.open) < 0.01 ? (
+                          <ReferenceLine
+                            key={`doji-${candle.label}`}
+                            segment={[
+                              { x: candle.idx - 0.28, y: candle.open },
+                              { x: candle.idx + 0.28, y: candle.open }
+                            ]}
+                            stroke="#67b2ff"
+                            strokeWidth={2}
+                          />
+                        ) : (
+                          <ReferenceArea
+                            key={`body-${candle.label}`}
+                            x1={candle.idx - 0.28}
+                            x2={candle.idx + 0.28}
+                            y1={candle.open}
+                            y2={candle.close}
+                            fill={candle.close >= candle.open ? "rgba(86,211,161,0.35)" : "rgba(255,138,146,0.35)"}
+                            stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
+                          />
+                        )
+                      )}
                     </ComposedChart>
                   ) : (
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -736,7 +703,40 @@ export function TransactionsView() {
                         labelFormatter={(label) => balanceCandleLabelByIdx.get(Number(label)) ?? ""}
                       />
                       <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} isAnimationActive={false} />
-                      <Customized component={(props: Record<string, unknown>) => <CandleLayer candles={balanceCandleSeries} {...props} />} />
+                      {balanceCandleSeries.map((candle) => (
+                        <ReferenceLine
+                          key={`balance-wick-${candle.label}`}
+                          segment={[
+                            { x: candle.idx, y: candle.low },
+                            { x: candle.idx, y: candle.high }
+                          ]}
+                          stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
+                          strokeWidth={1.4}
+                        />
+                      ))}
+                      {balanceCandleSeries.map((candle) =>
+                        Math.abs(candle.close - candle.open) < 0.01 ? (
+                          <ReferenceLine
+                            key={`balance-doji-${candle.label}`}
+                            segment={[
+                              { x: candle.idx - 0.28, y: candle.open },
+                              { x: candle.idx + 0.28, y: candle.open }
+                            ]}
+                            stroke="#67b2ff"
+                            strokeWidth={2}
+                          />
+                        ) : (
+                          <ReferenceArea
+                            key={`balance-body-${candle.label}`}
+                            x1={candle.idx - 0.28}
+                            x2={candle.idx + 0.28}
+                            y1={candle.open}
+                            y2={candle.close}
+                            fill={candle.close >= candle.open ? "rgba(86,211,161,0.35)" : "rgba(255,138,146,0.35)"}
+                            stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
+                          />
+                        )
+                      )}
                     </ComposedChart>
                   ) : (
                     <LineChart data={displayBalanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
