@@ -2,19 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
+  Brush,
   CartesianGrid,
   ComposedChart,
+  Customized,
   Legend,
   Line,
   LineChart,
-  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis
 } from "recharts";
-import { cashflowSeries, cashflowTransactions, localIsoDate, monthlyCandlestickSeries, postedTransactionsAsOf, transactionDeltaByAccount } from "../../domain/calculations";
+import { cashflowSeries, cashflowTransactions, localIsoDate, postedTransactionsAsOf, transactionDeltaByAccount } from "../../domain/calculations";
 import type { Transaction } from "../../domain/models";
 import { parseTransactionsCsv } from "../../services/importExport/csv";
 import { useFinanceStore } from "../../state/store";
@@ -23,7 +24,7 @@ type ChartRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 type PrimaryChartMode = "line" | "area" | "candles";
 type TransactionScope = "all" | "manual" | "imported";
 type TransactionTypeFilter = "all" | "income" | "expense";
-const IMPORT_CUTOFF_DATE = "2026-02-01";
+const IMPORT_CUTOFF_DATE = "2026-02-12";
 const TRANSACTIONS_PAGE_SIZE = 18;
 
 function getInitialState(defaultAccount = "unassigned"): Transaction {
@@ -54,11 +55,247 @@ function isImportedTransaction(transaction: Transaction) {
   return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
 }
 
+function formatMonthLabel(month: string) {
+  const [year, monthNumber] = month.split("-");
+  if (!year || !monthNumber) return month;
+  return `${monthNumber}/${year.slice(-2)}`;
+}
+
+function formatDateLabel(date: string, range: ChartRange) {
+  const [year, month, day] = date.split("-");
+  if (!year || !month || !day) return date;
+  if (range === "1M" || range === "3M") {
+    return `${month}/${day}`;
+  }
+  return `${month}/${year.slice(-2)}`;
+}
+
+function compressBalanceSeriesForLongRange(points: Array<{ date: string; balance: number }>, range: ChartRange) {
+  if ((range === "1Y" || range === "ALL") && points.length > 90) {
+    const byMonth = new Map<string, { date: string; balance: number }>();
+    points.forEach((point) => {
+      byMonth.set(point.date.slice(0, 7), point);
+    });
+    return [...byMonth.values()];
+  }
+  return points;
+}
+
+function stretchBalanceSeriesWindow(
+  points: Array<{ date: string; balance: number }>,
+  startIso: string | null,
+  endIso: string | null,
+  fallbackBalance: number
+) {
+  if (!startIso || !endIso) return points;
+  if (points.length === 0) {
+    if (startIso === endIso) return [{ date: startIso, balance: fallbackBalance }];
+    return [
+      { date: startIso, balance: fallbackBalance },
+      { date: endIso, balance: fallbackBalance }
+    ];
+  }
+  const stretched = [...points];
+  if (stretched[0].date > startIso) {
+    stretched.unshift({ date: startIso, balance: stretched[0].balance });
+  }
+  const last = stretched[stretched.length - 1];
+  if (last.date < endIso) {
+    stretched.push({ date: endIso, balance: last.balance });
+  }
+  return stretched;
+}
+
 function rangeStart(range: ChartRange, todayIso: string) {
   if (range === "ALL") return null;
   const today = new Date(`${todayIso}T00:00:00`);
   const monthsBack = range === "1M" ? 1 : range === "3M" ? 3 : range === "6M" ? 6 : 12;
-  return new Date(today.getFullYear(), today.getMonth() - monthsBack, 1);
+  return new Date(today.getFullYear(), today.getMonth() - monthsBack, today.getDate());
+}
+
+function rangeProjectionEnd(range: ChartRange, todayIso: string) {
+  if (range === "ALL") return null;
+  const today = new Date(`${todayIso}T00:00:00`);
+  const monthsForward = range === "1M" ? 1 : range === "3M" ? 3 : range === "6M" ? 6 : 12;
+  return new Date(today.getFullYear(), today.getMonth() + monthsForward, today.getDate());
+}
+
+type CandlePoint = {
+  idx: number;
+  label: string;
+  open: number;
+  close: number;
+  high: number;
+  low: number;
+};
+
+function CandleLayer({
+  candles,
+  xAxisMap,
+  yAxisMap
+}: {
+  candles: CandlePoint[];
+  xAxisMap?: unknown;
+  yAxisMap?: unknown;
+}) {
+  const resolveFirstAxis = (axisMap: unknown) => {
+    if (!axisMap) return null;
+    if (axisMap instanceof Map) {
+      return axisMap.values().next().value ?? null;
+    }
+    if (Array.isArray(axisMap)) return axisMap[0] ?? null;
+    return Object.values(axisMap as Record<string, unknown>)[0] ?? null;
+  };
+  const resolveScale = (axis: unknown) => {
+    const candidate = axis as { scale?: unknown };
+    if (!candidate?.scale) return null;
+    if (typeof candidate.scale === "function") return candidate.scale as (value: number) => number;
+    const nested = candidate.scale as { scale?: unknown };
+    if (typeof nested?.scale === "function") return nested.scale as (value: number) => number;
+    return null;
+  };
+
+  const xAxis = resolveFirstAxis(xAxisMap);
+  const yAxis = resolveFirstAxis(yAxisMap);
+  const xScale = resolveScale(xAxis);
+  const yScale = resolveScale(yAxis);
+  if (!xScale || !yScale || candles.length === 0) return null;
+
+  const bodyWidth = 8;
+  return (
+    <g>
+      {candles.map((candle) => {
+        const x = xScale(candle.idx);
+        const yHigh = yScale(candle.high);
+        const yLow = yScale(candle.low);
+        const yOpen = yScale(candle.open);
+        const yClose = yScale(candle.close);
+        if (![x, yHigh, yLow, yOpen, yClose].every((value) => Number.isFinite(value))) {
+          return null;
+        }
+        const isBull = candle.close >= candle.open;
+        const bodyStroke = isBull ? "#56d3a1" : "#ff8a92";
+        const bodyFill = isBull ? "rgba(86,211,161,0.35)" : "rgba(255,138,146,0.35)";
+        const isDoji = Math.abs(candle.close - candle.open) < 0.01;
+        const bodyTop = Math.min(yOpen, yClose);
+        const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+
+        return (
+          <g key={`candle-${candle.label}-${candle.idx}`}>
+            <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={bodyStroke} strokeWidth={1.4} />
+            {isDoji ? (
+              <line x1={x - bodyWidth / 2} y1={yOpen} x2={x + bodyWidth / 2} y2={yOpen} stroke="#67b2ff" strokeWidth={2} />
+            ) : (
+              <rect x={x - bodyWidth / 2} y={bodyTop} width={bodyWidth} height={bodyHeight} fill={bodyFill} stroke={bodyStroke} />
+            )}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function addDays(isoDate: string, days: number) {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return localIsoDate(date);
+}
+
+function buildCashflowCandlesForRange(
+  transactions: Transaction[],
+  startIso: string | null,
+  endIso: string | null
+): CandlePoint[] {
+  const sorted = [...transactions].sort((a, b) => a.date.localeCompare(b.date));
+  const start = startIso ?? (sorted[0]?.date ?? localIsoDate());
+  const end = endIso ?? (sorted[sorted.length - 1]?.date ?? localIsoDate());
+  if (start > end) return [];
+
+  let running = sorted
+    .filter((tx) => tx.date < start)
+    .reduce((sum, tx) => sum + (tx.type === "income" ? tx.amount : -tx.amount), 0);
+
+  const inRange = sorted.filter((tx) => tx.date >= start && tx.date <= end);
+  const dailyMap = inRange.reduce<Map<string, Transaction[]>>((map, tx) => {
+    const list = map.get(tx.date) ?? [];
+    list.push(tx);
+    map.set(tx.date, list);
+    return map;
+  }, new Map<string, Transaction[]>());
+
+  const firstRealDate = inRange[0]?.date;
+  if (!firstRealDate) return [];
+  const seriesStart = firstRealDate;
+  if (seriesStart > end) return [];
+
+  const output: CandlePoint[] = [];
+  let cursor = seriesStart;
+  let idx = 0;
+  while (cursor <= end) {
+    const dayTransactions = (dailyMap.get(cursor) ?? []).sort((a, b) => a.id.localeCompare(b.id));
+    const open = running;
+    let high = open;
+    let low = open;
+    dayTransactions.forEach((tx) => {
+      running += tx.type === "income" ? tx.amount : -tx.amount;
+      high = Math.max(high, running);
+      low = Math.min(low, running);
+    });
+    const close = running;
+    output.push({
+      idx,
+      label: cursor,
+      open,
+      close,
+      high: Math.max(high, open, close),
+      low: Math.min(low, open, close)
+    });
+    idx += 1;
+    cursor = addDays(cursor, 1);
+  }
+  return output;
+}
+
+function buildBalanceCandlesForRange(
+  points: Array<{ date: string; balance: number }>,
+  startIso: string | null,
+  endIso: string | null,
+  todayIso: string
+): CandlePoint[] {
+  if (points.length === 0) return [];
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const hardStart = startIso ?? sorted[0].date;
+  const hardEnd = endIso ?? sorted[sorted.length - 1].date;
+  const firstKnown = sorted[0].date;
+  const firstVisible = firstKnown > hardStart ? firstKnown : hardStart;
+  const seriesStart = firstVisible <= todayIso && todayIso <= hardEnd ? firstVisible : firstVisible;
+  if (seriesStart > hardEnd) return [];
+
+  const byDate = new Map<string, number>();
+  sorted.forEach((point) => byDate.set(point.date, point.balance));
+  const startSeed =
+    [...sorted].reverse().find((point) => point.date <= seriesStart)?.balance ??
+    sorted[0].balance;
+
+  const output: CandlePoint[] = [];
+  let cursor = seriesStart;
+  let idx = 0;
+  let previousClose = startSeed;
+  while (cursor <= hardEnd) {
+    const close = byDate.get(cursor) ?? previousClose;
+    output.push({
+      idx,
+      label: cursor,
+      open: previousClose,
+      close,
+      high: Math.max(previousClose, close),
+      low: Math.min(previousClose, close)
+    });
+    previousClose = close;
+    cursor = addDays(cursor, 1);
+    idx += 1;
+  }
+  return output;
 }
 
 export function TransactionsView() {
@@ -143,8 +380,11 @@ export function TransactionsView() {
   const maxHeatAmount = Math.max(1, ...heatmapRows.map((row) => Math.max(row.expense, row.income)));
   const cashflowTx = useMemo(() => cashflowTransactions(transactions, cards), [transactions, cards]);
   const monthlySeries = useMemo(() => cashflowSeries(cashflowTx), [cashflowTx]);
-  const candleSeries = useMemo(() => monthlyCandlestickSeries(cashflowTx), [cashflowTx]);
   const today = localIsoDate();
+  const start = rangeStart(chartRange, today);
+  const projectionEnd = rangeProjectionEnd(chartRange, today);
+  const startIso = start ? localIsoDate(start) : null;
+  const endIso = projectionEnd ? localIsoDate(projectionEnd) : null;
   const postedCashflow = useMemo(() => postedTransactionsAsOf(cashflowTx, today), [cashflowTx, today]);
   const postedByAccountWithoutImported = useMemo(
     () => transactionDeltaByAccount(transactions, today, { includeImported: false }),
@@ -176,28 +416,70 @@ export function TransactionsView() {
     () => [...transactions].filter((tx) => tx.date > today).sort((a, b) => a.date.localeCompare(b.date)),
     [transactions, today]
   );
-  const start = rangeStart(chartRange, today);
   const filteredMonthlySeries = useMemo(
     () =>
-      start
-        ? monthlySeries.filter((point) => new Date(`${point.month}-01T00:00:00`) >= start)
+      startIso
+        ? monthlySeries.filter((point) => point.month >= startIso.slice(0, 7) && point.month <= (endIso?.slice(0, 7) ?? point.month))
         : monthlySeries,
-    [monthlySeries, start]
+    [monthlySeries, startIso, endIso]
   );
+  const projectedBalanceSeries = useMemo(() => {
+    const byFutureDate = cashflowTx
+      .filter((tx) => tx.date > today)
+      .reduce<Map<string, number>>((map, tx) => {
+        const delta = tx.type === "income" ? tx.amount : -tx.amount;
+        map.set(tx.date, (map.get(tx.date) ?? 0) + delta);
+        return map;
+      }, new Map<string, number>());
+
+    const futureRows = [...byFutureDate.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, delta]) => ({ date, delta }));
+
+    let running = balanceSeries[balanceSeries.length - 1]?.balance ?? liveCashAnchor;
+    const projectedFuture = futureRows.map((row) => {
+      running += row.delta;
+      return { date: row.date, balance: running };
+    });
+    return [...balanceSeries, ...projectedFuture];
+  }, [cashflowTx, today, balanceSeries, liveCashAnchor]);
   const filteredBalanceSeries = useMemo(
-    () => (start ? balanceSeries.filter((point) => new Date(`${point.date}T00:00:00`) >= start) : balanceSeries),
-    [balanceSeries, start]
-  );
-  const filteredCandleSeries = useMemo(
     () =>
-      start
-        ? candleSeries.filter((point) => new Date(`${point.month}-01T00:00:00`) >= start)
-        : candleSeries,
-    [candleSeries, start]
+      startIso && endIso
+        ? projectedBalanceSeries.filter((point) => point.date >= startIso && point.date <= endIso)
+        : projectedBalanceSeries,
+    [projectedBalanceSeries, startIso, endIso]
   );
-  const hasCashflowSeries = filteredMonthlySeries.length >= 2;
-  const hasCandles = filteredCandleSeries.length >= 2;
-  const hasBalanceSeries = filteredBalanceSeries.length >= 2;
+  const cashflowCandleSeries = useMemo(
+    () => (primaryChartMode === "candles" ? buildCashflowCandlesForRange(cashflowTx, startIso, endIso) : []),
+    [primaryChartMode, cashflowTx, startIso, endIso]
+  );
+  const displayBalanceSeries = useMemo(
+    () =>
+      compressBalanceSeriesForLongRange(
+        stretchBalanceSeriesWindow(filteredBalanceSeries, startIso, endIso, liveCashAnchor),
+        chartRange
+      ),
+    [filteredBalanceSeries, chartRange, startIso, endIso, liveCashAnchor]
+  );
+  const balanceCandleSeries = useMemo(
+    () => (primaryChartMode === "candles" ? buildBalanceCandlesForRange(filteredBalanceSeries, startIso, endIso, today) : []),
+    [primaryChartMode, filteredBalanceSeries, startIso, endIso, today]
+  );
+  const cashflowCandleLabelByIdx = useMemo(
+    () => new Map(cashflowCandleSeries.map((point) => [point.idx, point.label])),
+    [cashflowCandleSeries]
+  );
+  const balanceCandleLabelByIdx = useMemo(
+    () => new Map(balanceCandleSeries.map((point) => [point.idx, point.label])),
+    [balanceCandleSeries]
+  );
+  const hasCashflowSeries = filteredMonthlySeries.length >= 1;
+  const hasCashflowCandles = cashflowCandleSeries.length >= 1;
+  const hasBalanceCandles = balanceCandleSeries.length >= 1;
+  const canRenderPrimaryChart = primaryChartMode === "candles" ? hasCashflowCandles : hasCashflowSeries;
+  const hasBalanceSeries = displayBalanceSeries.length >= 2;
+  const canRenderBalanceChart = primaryChartMode === "candles" ? hasBalanceCandles : hasBalanceSeries;
   const bankNameById = useMemo(
     () =>
       banks.reduce<Record<string, string>>((acc, bank) => {
@@ -213,6 +495,15 @@ export function TransactionsView() {
         return acc;
       }, {}),
     [cards]
+  );
+  const accountLabel = useMemo(
+    () => (accountId: string) => {
+      if (bankNameById[accountId]) return bankNameById[accountId];
+      if (cardNameById[accountId]) return cardNameById[accountId];
+      if (accountId.startsWith("bank-feed:")) return "Imported Bank Account";
+      return accountId;
+    },
+    [bankNameById, cardNameById]
   );
   const postedIncome = useMemo(
     () => postedCashflow.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0),
@@ -348,13 +639,13 @@ export function TransactionsView() {
         </div>
         <div className="chart-grid">
           <div className="chart-panel">
-            {hasCashflowSeries ? (
+            {canRenderPrimaryChart ? (
               <div className="chart-box">
                 <ResponsiveContainer width="100%" height={180}>
                   {primaryChartMode === "area" ? (
                     <AreaChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                      <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
@@ -365,7 +656,7 @@ export function TransactionsView() {
                   ) : primaryChartMode === "line" ? (
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                      <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
@@ -373,15 +664,18 @@ export function TransactionsView() {
                       {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />}
                       {showNet && <Line type="monotone" dataKey="net" stroke="#67b2ff" dot={false} strokeWidth={2} isAnimationActive={false} />}
                     </LineChart>
-                  ) : hasCandles ? (
-                    <ComposedChart data={filteredCandleSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  ) : hasCashflowCandles ? (
+                    <ComposedChart data={cashflowCandleSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
                       <XAxis
                         type="number"
                         dataKey="idx"
                         domain={["dataMin - 1", "dataMax + 1"]}
-                        tickCount={Math.min(8, filteredCandleSeries.length)}
-                        tickFormatter={(idx) => filteredCandleSeries.find((point) => point.idx === Number(idx))?.month ?? ""}
+                        tickCount={Math.min(8, cashflowCandleSeries.length)}
+                        tickFormatter={(idx) => {
+                          const label = cashflowCandleLabelByIdx.get(Number(idx)) ?? "";
+                          return formatDateLabel(label, chartRange);
+                        }}
                         tick={{ fill: "#9fb8e9", fontSize: 12 }}
                         axisLine={false}
                         tickLine={false}
@@ -390,36 +684,15 @@ export function TransactionsView() {
                       <Tooltip
                         formatter={(value) => money(typeof value === "number" ? value : Number(value))}
                         contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
-                        labelFormatter={(label) => filteredCandleSeries.find((point) => point.idx === Number(label))?.month ?? ""}
+                        labelFormatter={(label) => cashflowCandleLabelByIdx.get(Number(label)) ?? ""}
                       />
-                      <Line type="monotone" dataKey="close" stroke="transparent" dot={false} isAnimationActive={false} />
-                      {filteredCandleSeries.map((candle) => (
-                        <ReferenceLine
-                          key={`wick-${candle.month}`}
-                          segment={[
-                            { x: candle.idx, y: candle.low },
-                            { x: candle.idx, y: candle.high }
-                          ]}
-                          stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
-                          strokeWidth={1.4}
-                        />
-                      ))}
-                      {filteredCandleSeries.map((candle) => (
-                        <ReferenceArea
-                          key={`body-${candle.month}`}
-                          x1={candle.idx - 0.28}
-                          x2={candle.idx + 0.28}
-                          y1={candle.open}
-                          y2={candle.close === candle.open ? candle.close + 0.0001 : candle.close}
-                          fill={candle.close >= candle.open ? "rgba(86,211,161,0.35)" : "rgba(255,138,146,0.35)"}
-                          stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
-                        />
-                      ))}
+                      <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} isAnimationActive={false} />
+                      <Customized component={(props: Record<string, unknown>) => <CandleLayer candles={cashflowCandleSeries} {...props} />} />
                     </ComposedChart>
                   ) : (
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                      <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
                       <Legend />
@@ -430,23 +703,63 @@ export function TransactionsView() {
                   )}
                 </ResponsiveContainer>
               </div>
+            ) : primaryChartMode === "candles" ? (
+              <div className="chart-empty">No candlestick buckets in this timeframe yet. Expand range or add transactions.</div>
             ) : (
               <div className="chart-empty">Add transactions from at least 2 different months to render the trend chart.</div>
             )}
           </div>
           <div className="chart-panel">
-            {hasBalanceSeries ? (
+            {canRenderBalanceChart ? (
               <div className="chart-box">
                 <ResponsiveContainer width="100%" height={180}>
-                  <LineChart data={filteredBalanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                    <XAxis dataKey="date" hide={filteredBalanceSeries.length > 14} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
-                    <Line type="monotone" dataKey="balance" stroke="#ffb26b" dot={false} strokeWidth={2.5} isAnimationActive={false} />
-                  </LineChart>
+                  {primaryChartMode === "candles" ? (
+                    <ComposedChart data={balanceCandleSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                      <XAxis
+                        type="number"
+                        dataKey="idx"
+                        domain={["dataMin - 1", "dataMax + 1"]}
+                        tickCount={Math.min(8, balanceCandleSeries.length)}
+                        tickFormatter={(idx) => {
+                          const label = balanceCandleLabelByIdx.get(Number(idx)) ?? "";
+                          return formatDateLabel(label, chartRange);
+                        }}
+                        tick={{ fill: "#9fb8e9", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        formatter={(value) => money(typeof value === "number" ? value : Number(value))}
+                        contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
+                        labelFormatter={(label) => balanceCandleLabelByIdx.get(Number(label)) ?? ""}
+                      />
+                      <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} isAnimationActive={false} />
+                      <Customized component={(props: Record<string, unknown>) => <CandleLayer candles={balanceCandleSeries} {...props} />} />
+                    </ComposedChart>
+                  ) : (
+                    <LineChart data={displayBalanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={(value) => formatDateLabel(String(value), chartRange)}
+                        minTickGap={24}
+                        tick={{ fill: "#9fb8e9", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <Line type="monotone" dataKey="balance" stroke="#ffb26b" dot={false} strokeWidth={2.5} isAnimationActive={false} />
+                      <ReferenceLine x={today} stroke="rgba(103,178,255,0.65)" strokeDasharray="4 4" />
+                      {displayBalanceSeries.length > 18 ? <Brush dataKey="date" height={18} stroke="#2f61c0" travellerWidth={8} /> : null}
+                    </LineChart>
+                  )}
                 </ResponsiveContainer>
               </div>
+            ) : primaryChartMode === "candles" ? (
+              <div className="chart-empty">No candlestick buckets in this timeframe yet. Expand range or add transactions.</div>
             ) : (
               <div className="chart-empty">Add at least 2 transactions to visualize running balance movement.</div>
             )}
@@ -476,7 +789,7 @@ export function TransactionsView() {
                     <td className={tx.type === "income" ? "value-positive" : "value-negative"}>{tx.type}</td>
                     <td>{tx.category}</td>
                     <td className={tx.type === "income" ? "value-positive" : "value-negative"}>{money(tx.amount)}</td>
-                    <td>{bankNameById[tx.account] ?? cardNameById[tx.account] ?? tx.account}</td>
+                    <td>{accountLabel(tx.account)}</td>
                     <td>
                       <div className="row-actions">
                         <button onClick={() => void postNow(tx)}>Post Now</button>
@@ -617,7 +930,7 @@ export function TransactionsView() {
                   <td>{tx.category}</td>
                   <td>{tx.merchant || "-"}</td>
                   <td className={tx.type === "income" ? "value-positive" : "value-negative"}>{money(tx.amount)}</td>
-                  <td>{bankNameById[tx.account] ?? cardNameById[tx.account] ?? tx.account}</td>
+                  <td>{accountLabel(tx.account)}</td>
                   <td>
                     <div className="row-actions">
                       <button type="button" onClick={() => setForm(tx)}>Edit</button>
