@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
   Legend,
-  Line,
-  LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,6 +15,11 @@ import {
 import { evaluateScenario, localIsoDate, scenarioSeries } from "../../domain/calculations";
 import type { Scenario } from "../../domain/models";
 import { useFinanceStore } from "../../state/store";
+import { useChartTheme } from "../../ui/charts/chartTheme";
+import { useChartAnimation } from "../../hooks/useChartAnimation";
+import { CustomTooltip } from "../../ui/charts/ChartTooltip";
+import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
+import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 
 const initialState: Scenario = {
   id: "",
@@ -39,6 +45,8 @@ export function ScenariosView() {
   const upsertScenario = useFinanceStore((state) => state.upsertScenario);
   const deleteScenario = useFinanceStore((state) => state.deleteScenario);
   const [form, setForm] = useState<Scenario>(initialState);
+  const { colors, visuals } = useChartTheme();
+  const anim = useChartAnimation();
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>("");
   const isEditing = Boolean(form.id);
 
@@ -149,13 +157,14 @@ export function ScenariosView() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart layout="vertical" data={scenarioBars} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" width={150} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={150} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
                 <Legend />
-                <Bar dataKey="monthlyCost" fill="#ffb26b" radius={[0, 8, 8, 0]} barSize={16} isAnimationActive={false} />
-                <Bar dataKey="disposableAfter" fill="#84f2c8" radius={[0, 8, 8, 0]} barSize={16} isAnimationActive={false} />
+                <Bar dataKey="monthlyCost" fill="url(#grad-bar-balance)" radius={[0, 8, 8, 0]} barSize={16} {...anim} />
+                <Bar dataKey="disposableAfter" fill="url(#grad-bar-positive)" radius={[0, 8, 8, 0]} barSize={16} {...anim} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -177,16 +186,18 @@ export function ScenariosView() {
           <p className="muted">Create a scenario to view projected disposable cash and debt over time.</p>
         ) : (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={scenarioChartSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={scenarioChartSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis dataKey="month" tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <ReferenceLine y={0} stroke={colors.axisColor} strokeDasharray="4 4" strokeOpacity={0.5} />
                 <Legend />
-                <Line type="monotone" dataKey="disposable" stroke="#84f2c8" dot={false} strokeWidth={2} isAnimationActive={false} />
-                <Line type="monotone" dataKey="debt" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />
-              </LineChart>
+                <Area type={visuals.curveType} dataKey="disposable" stroke={colors.positive} fill="url(#grad-positive)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />
+                <Area type={visuals.curveType} dataKey="debt" stroke={colors.negative} fill="url(#grad-negative)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         )}

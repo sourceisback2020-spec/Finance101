@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -14,6 +17,11 @@ import { calculateMonthlySubscriptionCost, localIsoDate, subscriptionForecastSer
 import type { Subscription } from "../../domain/models";
 import { syncScheduledChargesForSubscription, clearScheduledChargesForSubscription } from "../../services/subscriptions/scheduledCharges";
 import { useFinanceStore } from "../../state/store";
+import { useChartTheme } from "../../ui/charts/chartTheme";
+import { useChartAnimation } from "../../hooks/useChartAnimation";
+import { CustomTooltip } from "../../ui/charts/ChartTooltip";
+import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
+import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 import { normalizeUploadImage } from "../../ui/images/imageTools";
 
 const initialState: Subscription = {
@@ -46,6 +54,8 @@ export function SubscriptionsView() {
   const [form, setForm] = useState<Subscription>(initialState);
   const [status, setStatus] = useState<string | null>(null);
   const isEditing = Boolean(form.id);
+  const { colors, visuals } = useChartTheme();
+  const anim = useChartAnimation();
   const forecastSeries = subscriptionForecastSeries(subscriptions, 12);
   const activeSubs = useMemo(() => subscriptions.filter((sub) => sub.isActive), [subscriptions]);
   const monthlyCost = useMemo(() => calculateMonthlySubscriptionCost(subscriptions), [subscriptions]);
@@ -176,14 +186,14 @@ export function SubscriptionsView() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart layout="vertical" data={spendBySubscription} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(value: number) => money(value)}
-                  contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
-                />
-                <Bar dataKey="monthlyEquivalent" fill="#8ed0ff" radius={[0, 8, 8, 0]} barSize={18} isAnimationActive={false} />
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <Bar dataKey="monthlyEquivalent" fill="url(#grad-bar-subscription)" radius={[0, 8, 8, 0]} barSize={18} {...anim}>
+                  <LabelList dataKey="monthlyEquivalent" position="right" formatter={(v: number) => money(v)} style={{ fill: colors.axisColor, fontSize: 11 }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -193,15 +203,16 @@ export function SubscriptionsView() {
       <article className="panel">
         <h3>Recurring Cost Forecast (12 Months)</h3>
         <div className="chart-box">
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={forecastSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-              <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
-              <Line type="monotone" dataKey="recurringCost" stroke="#8ed0ff" dot={false} strokeWidth={2} isAnimationActive={false} />
-              <Line type="monotone" dataKey="cumulative" stroke="#ffb26b" dot={false} strokeWidth={2} isAnimationActive={false} />
-            </LineChart>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={forecastSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+              <XAxis dataKey="month" tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTooltip colors={colors} />} />
+              <Area type={visuals.curveType} dataKey="recurringCost" stroke={colors.subscription} fill="url(#grad-subscription)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />
+              <Area type={visuals.curveType} dataKey="cumulative" stroke={colors.balance} fill="url(#grad-balance)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </article>

@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,6 +14,11 @@ import {
 import { creditDebtProjectionSeries, localIsoDate, transactionDeltaByAccount } from "../../domain/calculations";
 import type { CreditCard } from "../../domain/models";
 import { useFinanceStore } from "../../state/store";
+import { useChartTheme } from "../../ui/charts/chartTheme";
+import { useChartAnimation } from "../../hooks/useChartAnimation";
+import { CustomTooltip } from "../../ui/charts/ChartTooltip";
+import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
+import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 
 const initialState: CreditCard = {
   id: "",
@@ -34,6 +40,8 @@ export function CreditCardsView() {
   const upsertCard = useFinanceStore((state) => state.upsertCard);
   const deleteCard = useFinanceStore((state) => state.deleteCard);
   const [form, setForm] = useState<CreditCard>(initialState);
+  const { colors, visuals } = useChartTheme();
+  const anim = useChartAnimation();
   const isEditing = Boolean(form.id);
   const debtSeries = creditDebtProjectionSeries(cards, 24);
   const hasDebt = cards.some((card) => card.balance > 0);
@@ -107,11 +115,13 @@ export function CreditCardsView() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart layout="vertical" data={debtByCard} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
-                <Bar dataKey="liveDebt" fill="#ff8a92" radius={[0, 8, 8, 0]} barSize={18} isAnimationActive={false} />
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <Bar dataKey="limit" fill={`${colors.axisColor}22`} radius={[0, 8, 8, 0]} barSize={18} {...anim} />
+                <Bar dataKey="liveDebt" fill="url(#grad-bar-debt)" radius={[0, 8, 8, 0]} barSize={18} {...anim} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -122,14 +132,16 @@ export function CreditCardsView() {
         <h3>Debt Trend Projection (Stock-Style)</h3>
         {hasDebt ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={190}>
-              <LineChart data={debtSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis dataKey="month" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
-                <Line type="monotone" dataKey="debt" stroke="#ff8a92" dot={false} strokeWidth={2.5} isAnimationActive={false} />
-              </LineChart>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={debtSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis dataKey="month" tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <ReferenceLine y={0} stroke={colors.axisColor} strokeDasharray="4 4" strokeOpacity={0.5} />
+                <Area type={visuals.curveType} dataKey="debt" stroke={colors.debt} fill="url(#grad-debt)" strokeWidth={2.5} activeDot={<CustomActiveDot />} {...anim} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         ) : (

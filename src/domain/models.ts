@@ -93,6 +93,36 @@ export type DashboardMetrics = {
   retirementProjected12m: number;
 };
 
+export type HealthSubScore = {
+  label: string;
+  value: number;
+  weight: number;
+  weighted: number;
+  rating: "good" | "fair" | "poor";
+};
+
+export type FinancialHealthScore = {
+  score: number;
+  rating: "excellent" | "good" | "fair" | "poor";
+  breakdown: HealthSubScore[];
+};
+
+export type CategoryVariance = {
+  category: string;
+  current: number;
+  previous: number;
+  change: number;
+  changePct: number;
+  anomaly: boolean;
+};
+
+export type NetWorthPoint = {
+  month: string;
+  assets: number;
+  liabilities: number;
+  net: number;
+};
+
 export type FinanceBackup = {
   format: "local-finance-backup";
   version: number;

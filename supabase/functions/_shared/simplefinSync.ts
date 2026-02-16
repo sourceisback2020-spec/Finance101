@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { fetchSimpleFinAccounts } from "./simplefin.ts";
-const IMPORT_CUTOFF_UNIX = Math.floor(new Date("2026-02-01T00:00:00Z").getTime() / 1000);
+const IMPORT_CUTOFF_UNIX = Math.floor(new Date("2026-02-12T00:00:00Z").getTime() / 1000);
+const IMPORT_CUTOFF_DATE = "2026-02-12";
 
 type SimpleFinConnectionRow = {
   owner_id: string;
@@ -59,6 +60,17 @@ export async function syncSimpleFinConnections(args: {
     const cursorStartDate = connection.sync_cursor ? Number(connection.sync_cursor) : IMPORT_CUTOFF_UNIX;
     const startDate = Math.max(cursorStartDate, IMPORT_CUTOFF_UNIX);
     const accountSet = await fetchSimpleFinAccounts(accessUrl, startDate);
+
+    // Enforce official bank-import start date on every sync.
+    const { count: prunedCount, error: pruneError } = await supabase
+      .from("finance_records")
+      .delete({ count: "exact" })
+      .eq("owner_id", ownerId)
+      .eq("collection", "transactions")
+      .like("id", `bank-feed:${connection.connection_id}:%`)
+      .lt("data->>date", IMPORT_CUTOFF_DATE);
+    if (pruneError) throw pruneError;
+    removed += prunedCount ?? 0;
 
     const { data: accountMaps, error: mapError } = await supabase
       .from("bank_feed_accounts")

@@ -362,7 +362,7 @@
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text) 7%, transparent),
     0 1px 14px color-mix(in srgb, var(--bg) 26%, transparent);
-  min-height: 190px;
+  min-height: 220px;
 }
 
 .chart-toolbar {
@@ -1052,5 +1052,439 @@ tr.row-debit td {
   font-weight: 700;
   color: #fff;
   background: linear-gradient(135deg, rgba(94, 186, 255, 0.45), rgba(138, 104, 255, 0.45));
+}
+
+/* ======================================================================
+   DESIGN CONCEPT: Executive Dashboard
+   Professional, sharp, trustworthy (Bloomberg/banking app)
+   ====================================================================== */
+
+:root[data-style="executive"] {
+  --font-family-ui: "Inter", "SF Pro", "Segoe UI", system-ui, sans-serif;
+}
+
+:root[data-style="executive"] .panel,
+:root[data-style="executive"] .kpi-card {
+  box-shadow: none;
+  border-image: none;
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border-left: 2px solid var(--accent);
+}
+
+:root[data-style="executive"] .chart-box {
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+:root[data-style="executive"] .kpi-card strong {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+:root[data-style="executive"] .nav-item:hover {
+  transform: none;
+}
+
+:root[data-style="executive"] .value-positive { color: #3FB950; }
+:root[data-style="executive"] .value-negative { color: #F85149; }
+:root[data-style="executive"] .value-warning { color: #D29922; }
+
+/* ======================================================================
+   DESIGN CONCEPT: The Futurist
+   Cybernetic, mission-control, sci-fi (neon on black)
+   ====================================================================== */
+
+:root[data-style="futurist"] {
+  --font-family-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+:root[data-style="futurist"] .panel,
+:root[data-style="futurist"] .kpi-card {
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 8px 24px color-mix(in srgb, var(--accent) 8%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+:root[data-style="futurist"] .panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.5;
+}
+
+:root[data-style="futurist"] .panel {
+  position: relative;
+  overflow: hidden;
+}
+
+:root[data-style="futurist"] .kpi-card strong {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+:root[data-style="futurist"] .kpi-card:hover {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent),
+    0 0 32px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+:root[data-style="futurist"] h2,
+:root[data-style="futurist"] h3 {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+:root[data-style="futurist"] .value-positive { color: #06D6A0; }
+:root[data-style="futurist"] .value-negative { color: #EF4444; }
+:root[data-style="futurist"] .value-warning { color: #F59E0B; }
+
+/* ======================================================================
+   DESIGN CONCEPT: The Data Journalist
+   Editorial, clean, bold typography (NYT/FT style)
+   ====================================================================== */
+
+:root[data-style="journalist"] {
+  --font-family-ui: "Source Serif 4", "IBM Plex Serif", Georgia, Cambria, "Times New Roman", serif;
+}
+
+:root[data-style="journalist"] .panel,
+:root[data-style="journalist"] .kpi-card {
+  box-shadow: none;
+  border-image: none;
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  padding: 24px;
+}
+
+:root[data-style="journalist"] .chart-box {
+  box-shadow: none;
+}
+
+:root[data-style="journalist"] h2,
+:root[data-style="journalist"] h3 {
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+}
+
+:root[data-style="journalist"] .kpi-card strong {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 22px;
+}
+
+:root[data-style="journalist"] .kpi-card h3 {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+:root[data-style="journalist"] .nav-item:hover {
+  transform: none;
+}
+
+:root[data-style="journalist"] .content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+:root[data-style="journalist"] .value-positive { color: #0EA5E9; }
+:root[data-style="journalist"] .value-negative { color: #DC2626; }
+:root[data-style="journalist"] .value-warning { color: #F97316; }
+
+/* ======================================================================
+   New Component Classes
+   ====================================================================== */
+
+.health-gauge {
+  overflow: visible;
+}
+
+.spending-pulse .chart-box {
+  min-height: auto;
+}
+
+.net-worth-panel .kpi-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 640px) {
+  .net-worth-panel .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ======================================================================
+   Chart Visual Enhancements
+   ====================================================================== */
+
+.custom-tooltip {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+:root[data-style="futurist"] .chart-box .recharts-curve.recharts-line-curve,
+:root[data-style="futurist"] .chart-box .recharts-area-curve {
+  filter: url(#chart-glow);
+}
+
+:root[data-style="futurist"] .chart-box {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 12%, transparent),
+    0 2px 20px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+@keyframes anomaly-pulse {
+  0%, 100% { stroke-opacity: 1; }
+  50% { stroke-opacity: 0.4; }
+}
+
+.anomaly-bar {
+  animation: anomaly-pulse 1.5s ease-in-out infinite;
+}
+
+.chart-box .recharts-label-list text {
+  pointer-events: none;
+}
+
+.chart-box .recharts-pie-label-text {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ======================================================================
+   Layout Modes
+   ====================================================================== */
+
+/* --- Sidebar Right --- */
+:root[data-layout="sidebar-right"] .app-shell {
+  grid-template-columns: 1fr 290px;
+}
+
+:root[data-layout="sidebar-right"] .sidebar {
+  order: 2;
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+:root[data-layout="sidebar-right"] .content {
+  order: 1;
+}
+
+/* --- Top Navigation --- */
+:root[data-layout="topnav"] .app-shell {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+:root[data-layout="topnav"] .topnav-bar {
+  flex-direction: row;
+  align-items: center;
+  padding: 10px 18px;
+  gap: 12px;
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+:root[data-layout="topnav"] .topnav-title {
+  font-size: 16px;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+:root[data-layout="topnav"] .sidebar nav {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+:root[data-layout="topnav"] .sidebar .nav-item {
+  margin-bottom: 0;
+  padding: 6px 10px;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+:root[data-layout="topnav"] .sidebar .sidebar-subtitle,
+:root[data-layout="topnav"] .sidebar .sidebar-auth,
+:root[data-layout="topnav"] .sidebar .sidebar-mobile-head,
+:root[data-layout="topnav"] .sidebar .sidebar-close-btn,
+:root[data-layout="topnav"] .sidebar .export-btn,
+:root[data-layout="topnav"] .sidebar .secondary-btn {
+  display: none;
+}
+
+/* --- Compact Rail --- */
+:root[data-layout="compact-rail"] .app-shell {
+  grid-template-columns: 60px 1fr;
+}
+
+:root[data-layout="compact-rail"] .sidebar {
+  width: 60px;
+  padding: 12px 6px;
+  align-items: center;
+  gap: 8px;
+}
+
+:root[data-layout="compact-rail"] .sidebar h1,
+:root[data-layout="compact-rail"] .sidebar .sidebar-subtitle,
+:root[data-layout="compact-rail"] .sidebar .sidebar-auth,
+:root[data-layout="compact-rail"] .sidebar .sidebar-mobile-head,
+:root[data-layout="compact-rail"] .sidebar .sidebar-close-btn,
+:root[data-layout="compact-rail"] .sidebar .export-btn,
+:root[data-layout="compact-rail"] .sidebar .secondary-btn {
+  display: none;
+}
+
+:root[data-layout="compact-rail"] .nav-item {
+  justify-content: center;
+  padding: 10px 0;
+  min-height: 40px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+}
+
+:root[data-layout="compact-rail"] .nav-item span {
+  display: none;
+}
+
+/* --- Focus Mode --- */
+:root[data-layout="focus"] .app-shell {
+  grid-template-columns: 1fr;
+}
+
+:root[data-layout="focus"] .sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(84vw, 320px);
+  transform: translateX(-102%);
+  transition: transform 220ms ease;
+  z-index: 10;
+}
+
+:root[data-layout="focus"] .sidebar-open .sidebar,
+:root[data-layout="focus"] .app-shell.sidebar-open .sidebar {
+  transform: translateX(0);
+}
+
+.sidebar.focus-hidden {
+  transform: translateX(-102%);
+}
+
+.focus-toggle-btn {
+  position: fixed;
+  bottom: 18px;
+  left: 18px;
+  z-index: 8;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-layout="focus"] .focus-toggle-btn {
+  display: inline-flex;
+}
+
+/* Layout overrides: all layouts collapse to drawer on mobile */
+@media (max-width: 1080px) {
+  :root[data-layout="sidebar-right"] .app-shell,
+  :root[data-layout="topnav"] .app-shell,
+  :root[data-layout="compact-rail"] .app-shell,
+  :root[data-layout="focus"] .app-shell {
+    display: block;
+    grid-template-columns: unset;
+    grid-template-rows: unset;
+  }
+
+  :root[data-layout="sidebar-right"] .sidebar,
+  :root[data-layout="topnav"] .sidebar,
+  :root[data-layout="compact-rail"] .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(84vw, 320px);
+    transform: translateX(-102%);
+    transition: transform 220ms ease;
+    z-index: 10;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    border-left: none;
+    border-bottom: none;
+    order: unset;
+    overflow-y: auto;
+    padding: 14px 12px 18px;
+    gap: 10px;
+  }
+
+  :root[data-layout="sidebar-right"] .sidebar-open .sidebar,
+  :root[data-layout="topnav"] .sidebar-open .sidebar,
+  :root[data-layout="compact-rail"] .sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  :root[data-layout="topnav"] .sidebar nav,
+  :root[data-layout="compact-rail"] .sidebar nav {
+    display: block;
+    flex-direction: column;
+  }
+
+  :root[data-layout="compact-rail"] .sidebar {
+    width: min(84vw, 320px);
+    align-items: stretch;
+  }
+
+  :root[data-layout="compact-rail"] .nav-item {
+    justify-content: flex-start;
+    padding: 8px 10px;
+  }
+
+  :root[data-layout="compact-rail"] .nav-item span,
+  :root[data-layout="compact-rail"] .sidebar h1,
+  :root[data-layout="compact-rail"] .sidebar .sidebar-subtitle,
+  :root[data-layout="compact-rail"] .sidebar .sidebar-auth,
+  :root[data-layout="compact-rail"] .sidebar .sidebar-mobile-head,
+  :root[data-layout="compact-rail"] .sidebar .sidebar-close-btn,
+  :root[data-layout="compact-rail"] .sidebar .export-btn,
+  :root[data-layout="compact-rail"] .sidebar .secondary-btn,
+  :root[data-layout="topnav"] .sidebar .sidebar-subtitle,
+  :root[data-layout="topnav"] .sidebar .sidebar-auth,
+  :root[data-layout="topnav"] .sidebar .sidebar-mobile-head,
+  :root[data-layout="topnav"] .sidebar .export-btn,
+  :root[data-layout="topnav"] .sidebar .secondary-btn {
+    display: revert;
+  }
+
+  :root[data-layout="topnav"] .sidebar .nav-item {
+    white-space: normal;
+    font-size: inherit;
+  }
+
+  :root[data-layout="focus"] .focus-toggle-btn {
+    display: none;
+  }
+
+  :root[data-layout="sidebar-right"] .content,
+  :root[data-layout="topnav"] .content,
+  :root[data-layout="compact-rail"] .content {
+    order: unset;
+  }
 }
 

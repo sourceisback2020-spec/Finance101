@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,6 +11,11 @@ import {
 import { calculateRetirementProjection, retirementTrendSeries } from "../../domain/calculations";
 import type { RetirementEntry } from "../../domain/models";
 import { useFinanceStore } from "../../state/store";
+import { useChartTheme } from "../../ui/charts/chartTheme";
+import { useChartAnimation } from "../../hooks/useChartAnimation";
+import { CustomTooltip } from "../../ui/charts/ChartTooltip";
+import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
+import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 
 const initialState: RetirementEntry = {
   id: "",
@@ -30,6 +35,8 @@ export function RetirementView() {
   const upsertEntry = useFinanceStore((state) => state.upsertRetirementEntry);
   const deleteEntry = useFinanceStore((state) => state.deleteRetirementEntry);
   const [form, setForm] = useState<RetirementEntry>(initialState);
+  const { colors, visuals } = useChartTheme();
+  const anim = useChartAnimation();
   const isEditing = Boolean(form.id);
   const projection = calculateRetirementProjection(entries);
   const trendSeries = retirementTrendSeries(entries);
@@ -83,14 +90,15 @@ export function RetirementView() {
         <h3>Balance Trend</h3>
         {hasTrend ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={trendSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis dataKey="date" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => money(value)} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
-                <Line type="monotone" dataKey="balance" stroke="#84f2c8" dot={false} strokeWidth={2.5} isAnimationActive={false} />
-              </LineChart>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={trendSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis dataKey="date" tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <Area type={visuals.curveType} dataKey="balance" stroke={colors.positive} fill="url(#grad-positive)" strokeWidth={2.5} activeDot={<CustomActiveDot />} {...anim} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         ) : (

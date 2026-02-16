@@ -3,7 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 type FontFamilyMode = "sans" | "serif" | "mono";
 type DensityMode = "cozy" | "comfortable" | "compact";
 type TextureMode = "none" | "grain" | "scanlines" | "carbon" | "dots";
-type StyleMode = "neon" | "soft" | "minimal" | "terminal";
+type StyleMode = "neon" | "soft" | "minimal" | "terminal" | "executive" | "futurist" | "journalist";
+export type LayoutMode = "default" | "sidebar-right" | "topnav" | "compact-rail" | "focus";
 
 type EffectSettings = {
   glassmorphism: boolean;
@@ -26,6 +27,7 @@ export type AppearanceSettings = {
   density: DensityMode;
   texture: TextureMode;
   style: StyleMode;
+  layout: LayoutMode;
   effects: EffectSettings;
 };
 
@@ -61,6 +63,7 @@ const defaultAppearance: AppearanceSettings = {
   density: "comfortable",
   texture: "grain",
   style: "neon",
+  layout: "default",
   effects: {
     glassmorphism: true,
     noiseTexture: true,
@@ -84,6 +87,7 @@ const builtinPresets: SavedPreset[] = [
       fontFamily: "sans",
       radius: 14,
       style: "neon",
+      layout: "default",
       texture: "scanlines",
       effects: { ...defaultAppearance.effects, glitchHeaders: true }
     }
@@ -99,6 +103,7 @@ const builtinPresets: SavedPreset[] = [
       fontFamily: "serif",
       radius: 20,
       style: "soft",
+      layout: "default",
       texture: "dots",
       effects: { ...defaultAppearance.effects, mouseTrailer: true }
     }
@@ -114,8 +119,90 @@ const builtinPresets: SavedPreset[] = [
       fontFamily: "sans",
       radius: 8,
       style: "minimal",
+      layout: "compact-rail",
       texture: "none",
       density: "comfortable",
+      effects: {
+        glassmorphism: false,
+        noiseTexture: false,
+        interactiveGlow: false,
+        ambientMotion: false,
+        mouseTrailer: false,
+        scrollReveal: false,
+        glitchHeaders: false
+      }
+    }
+  },
+  {
+    id: "executive",
+    name: "Executive",
+    settings: {
+      ...defaultAppearance,
+      primary: "#0D1117",
+      secondary: "#161B22",
+      accent: "#58A6FF",
+      fontFamily: "sans",
+      fontScale: 1,
+      lineHeight: 1.45,
+      radius: 10,
+      density: "comfortable",
+      style: "executive",
+      layout: "default",
+      texture: "none",
+      effects: {
+        glassmorphism: false,
+        noiseTexture: false,
+        interactiveGlow: false,
+        ambientMotion: false,
+        mouseTrailer: false,
+        scrollReveal: false,
+        glitchHeaders: false
+      }
+    }
+  },
+  {
+    id: "futurist",
+    name: "Futurist",
+    settings: {
+      ...defaultAppearance,
+      primary: "#030712",
+      secondary: "#0A1628",
+      accent: "#06D6A0",
+      fontFamily: "sans",
+      fontScale: 1,
+      lineHeight: 1.45,
+      radius: 14,
+      density: "comfortable",
+      style: "futurist",
+      layout: "topnav",
+      texture: "scanlines",
+      effects: {
+        glassmorphism: true,
+        noiseTexture: false,
+        interactiveGlow: true,
+        ambientMotion: true,
+        mouseTrailer: true,
+        scrollReveal: true,
+        glitchHeaders: false
+      }
+    }
+  },
+  {
+    id: "journalist",
+    name: "Journalist",
+    settings: {
+      ...defaultAppearance,
+      primary: "#0F0F12",
+      secondary: "#18181D",
+      accent: "#F97316",
+      fontFamily: "serif",
+      fontScale: 1.02,
+      lineHeight: 1.65,
+      radius: 8,
+      density: "cozy",
+      style: "journalist",
+      layout: "default",
+      texture: "none",
       effects: {
         glassmorphism: false,
         noiseTexture: false,
@@ -205,12 +292,14 @@ function applyAppearance(settings: AppearanceSettings) {
   root.setAttribute("data-glitch", String(settings.effects.glitchHeaders));
   root.setAttribute("data-style", settings.style);
   root.setAttribute("data-texture", settings.texture);
+  root.setAttribute("data-layout", settings.layout ?? "default");
 }
 
 function normalizeAppearance(raw?: Partial<AppearanceSettings>) {
   return {
     ...defaultAppearance,
     ...(raw ?? {}),
+    layout: (raw?.layout as LayoutMode) ?? defaultAppearance.layout,
     effects: {
       ...defaultAppearance.effects,
       ...(raw?.effects ?? {})
@@ -373,7 +462,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       fontScale: Number((0.92 + Math.random() * 0.28).toFixed(2)),
       lineHeight: Number((1.3 + Math.random() * 0.45).toFixed(2)),
       texture: (["none", "grain", "scanlines", "carbon", "dots"] as const)[Math.floor(Math.random() * 5)],
-      style: (["neon", "soft", "minimal", "terminal"] as const)[Math.floor(Math.random() * 4)]
+      style: (["neon", "soft", "minimal", "terminal", "executive", "futurist", "journalist"] as const)[Math.floor(Math.random() * 7)]
     }));
   }, []);
 

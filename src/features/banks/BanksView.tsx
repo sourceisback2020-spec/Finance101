@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,6 +17,11 @@ import { db } from "../../data/db";
 import { getHostedAuthDebug } from "../../data/supabaseAuth";
 import type { BankAccount } from "../../domain/models";
 import { useFinanceStore } from "../../state/store";
+import { useChartTheme } from "../../ui/charts/chartTheme";
+import { useChartAnimation } from "../../hooks/useChartAnimation";
+import { CustomTooltip } from "../../ui/charts/ChartTooltip";
+import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
+import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 import { normalizeUploadImage } from "../../ui/images/imageTools";
 
 const initialState: BankAccount = {
@@ -58,6 +64,8 @@ export function BanksView() {
   const bankFeedEnabled = db.isBankFeedEnabled();
   const isPlaidFeed = bankFeedProvider === "plaid";
   const isSimpleFinFeed = bankFeedProvider === "simplefin";
+  const { colors, visuals } = useChartTheme();
+  const anim = useChartAnimation();
   const isEditing = Boolean(form.id);
   const today = localIsoDate();
   const postedByAccount = useMemo(
@@ -366,14 +374,14 @@ export function BanksView() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height={260}>
               <BarChart layout="vertical" data={liveByBank} margin={{ top: 8, right: 16, left: 16, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" width={140} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(value) => money(typeof value === "number" ? value : Number(value))}
-                  contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
-                />
-                <Bar dataKey="live" fill="#56c7ff" radius={[0, 8, 8, 0]} barSize={18} isAnimationActive={false} />
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <Bar dataKey="live" fill="url(#grad-bar-balance)" radius={[0, 8, 8, 0]} barSize={18} {...anim}>
+                  <LabelList dataKey="live" position="right" formatter={(v: number) => money(v)} style={{ fill: colors.axisColor, fontSize: 11 }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -384,14 +392,15 @@ export function BanksView() {
         <h3>Liquidity Timeline</h3>
         {hasTimeline ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={balanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                <XAxis dataKey="date" tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
-                <Line type="monotone" dataKey="total" stroke="#56c7ff" dot={false} strokeWidth={2.5} isAnimationActive={false} />
-              </LineChart>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={balanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                <XAxis dataKey="date" tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <Area type={visuals.curveType} dataKey="total" stroke={colors.subscription} fill="url(#grad-subscription)" strokeWidth={2.5} activeDot={<CustomActiveDot />} {...anim} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         ) : (

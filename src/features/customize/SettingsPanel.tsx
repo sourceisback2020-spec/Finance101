@@ -150,11 +150,24 @@ export function SettingsPanel() {
           </label>
           <label>
             Style
-            <select value={appearance.style} onChange={(e) => setAppearance({ style: e.target.value as "neon" | "soft" | "minimal" | "terminal" })}>
+            <select value={appearance.style} onChange={(e) => setAppearance({ style: e.target.value as "neon" | "soft" | "minimal" | "terminal" | "executive" | "futurist" | "journalist" })}>
               <option value="neon">Neon</option>
               <option value="soft">Soft Glass</option>
               <option value="minimal">Minimal</option>
               <option value="terminal">Terminal</option>
+              <option value="executive">Executive</option>
+              <option value="futurist">Futurist</option>
+              <option value="journalist">Journalist</option>
+            </select>
+          </label>
+          <label>
+            Layout
+            <select value={appearance.layout ?? "default"} onChange={(e) => setAppearance({ layout: e.target.value as "default" | "sidebar-right" | "topnav" | "compact-rail" | "focus" })}>
+              <option value="default">Sidebar Left</option>
+              <option value="sidebar-right">Sidebar Right</option>
+              <option value="topnav">Top Navigation</option>
+              <option value="compact-rail">Compact Rail</option>
+              <option value="focus">Focus Mode</option>
             </select>
           </label>
         </div>

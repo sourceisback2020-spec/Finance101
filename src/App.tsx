@@ -131,11 +131,27 @@ function App() {
       });
     };
 
+    let frameId: number | null = null;
+    const scheduleDecorate = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        decoratePanels();
+      });
+    };
+
     decoratePanels();
-    const observer = new MutationObserver(() => decoratePanels());
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [hostedAuthEnabled, hostedUser, view]);
+    const contentRoot = document.querySelector<HTMLElement>(".content");
+    if (!contentRoot) return;
+    const observer = new MutationObserver(() => scheduleDecorate());
+    observer.observe(contentRoot, { childList: true, subtree: false });
+    return () => {
+      observer.disconnect();
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [hostedAuthEnabled, hostedUser]);
 
   const onSignIn = async (email: string, password: string) => {
     const { error } = await signInHosted(email, password);

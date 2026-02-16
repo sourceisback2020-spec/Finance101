@@ -19,12 +19,21 @@ import { cashflowSeries, cashflowTransactions, localIsoDate, postedTransactionsA
 import type { Transaction } from "../../domain/models";
 import { parseTransactionsCsv } from "../../services/importExport/csv";
 import { useFinanceStore } from "../../state/store";
+import { useChartTheme } from "../../ui/charts/chartTheme";
+import { useChartAnimation } from "../../hooks/useChartAnimation";
+import { CustomTooltip } from "../../ui/charts/ChartTooltip";
+import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
+import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 
 type ChartRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 type PrimaryChartMode = "line" | "area" | "candles";
 type TransactionScope = "all" | "manual" | "imported";
 type TransactionTypeFilter = "all" | "income" | "expense";
-const IMPORT_CUTOFF_DATE = "2026-02-12";
+const IMPORT_CUTOFF_DATE = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 90);
+  return localIsoDate(d);
+})();
 const TRANSACTIONS_PAGE_SIZE = 18;
 
 function getInitialState(defaultAccount = "unassigned"): Transaction {
@@ -240,6 +249,8 @@ export function TransactionsView() {
   const upsertTransaction = useFinanceStore((state) => state.upsertTransaction);
   const deleteTransaction = useFinanceStore((state) => state.deleteTransaction);
   const bulkInsert = useFinanceStore((state) => state.bulkInsertTransactions);
+  const { colors, visuals } = useChartTheme();
+  const anim = useChartAnimation();
   const [form, setForm] = useState<Transaction>(getInitialState(banks[0]?.id ?? "unassigned"));
   const [query, setQuery] = useState("");
   const [chartRange, setChartRange] = useState<ChartRange>("6M");
@@ -575,32 +586,33 @@ export function TransactionsView() {
           <div className="chart-panel">
             {canRenderPrimaryChart ? (
               <div className="chart-box">
-                <ResponsiveContainer width="100%" height={180}>
+                <ResponsiveContainer width="100%" height={220}>
                   {primaryChartMode === "area" ? (
                     <AreaChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                    <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
                       <Legend />
-                      {showIncome && <Area type="monotone" dataKey="income" stroke="#56d3a1" fill="rgba(86,211,161,0.2)" strokeWidth={2} isAnimationActive={false} />}
-                      {showExpense && <Area type="monotone" dataKey="expense" stroke="#ff8a92" fill="rgba(255,138,146,0.2)" strokeWidth={2} isAnimationActive={false} />}
-                      {showNet && <Area type="monotone" dataKey="net" stroke="#67b2ff" fill="rgba(103,178,255,0.18)" strokeWidth={2} isAnimationActive={false} />}
+                      {showIncome && <Area type={visuals.curveType} dataKey="income" stroke={colors.income} fill="url(#grad-income)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showExpense && <Area type={visuals.curveType} dataKey="expense" stroke={colors.expense} fill="url(#grad-expense)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showNet && <Area type={visuals.curveType} dataKey="net" stroke={colors.net} fill="url(#grad-net)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
                     </AreaChart>
                   ) : primaryChartMode === "line" ? (
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
                       <Legend />
-                      {showIncome && <Line type="monotone" dataKey="income" stroke="#56d3a1" dot={false} strokeWidth={2} isAnimationActive={false} />}
-                      {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />}
-                      {showNet && <Line type="monotone" dataKey="net" stroke="#67b2ff" dot={false} strokeWidth={2} isAnimationActive={false} />}
+                      {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
                     </LineChart>
                   ) : hasCashflowCandles ? (
                     <ComposedChart data={cashflowCandleSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} />
                       <XAxis
                         type="number"
                         dataKey="idx"
@@ -610,17 +622,15 @@ export function TransactionsView() {
                           const label = cashflowCandleLabelByIdx.get(Number(idx)) ?? "";
                           return formatDateLabel(label, chartRange);
                         }}
-                        tick={{ fill: "#9fb8e9", fontSize: 12 }}
+                        tick={{ fill: colors.axisColor, fontSize: 12 }}
                         axisLine={false}
                         tickLine={false}
                       />
-                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip
-                        formatter={(value) => money(typeof value === "number" ? value : Number(value))}
-                        contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
-                        labelFormatter={(label) => cashflowCandleLabelByIdx.get(Number(label)) ?? ""}
+                        content={<CustomTooltip colors={colors} formatLabel={(l) => cashflowCandleLabelByIdx.get(Number(l)) ?? String(l)} />}
                       />
-                      <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} {...anim} />
                       {cashflowCandleSeries.map((candle) => (
                         <ReferenceLine
                           key={`wick-${candle.label}`}
@@ -628,8 +638,8 @@ export function TransactionsView() {
                             { x: candle.idx, y: candle.low },
                             { x: candle.idx, y: candle.high }
                           ]}
-                          stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
-                          strokeWidth={1.4}
+                          stroke={candle.close >= candle.open ? colors.income : colors.expense}
+                          strokeWidth={2}
                         />
                       ))}
                       {cashflowCandleSeries.map((candle) =>
@@ -640,7 +650,7 @@ export function TransactionsView() {
                               { x: candle.idx - 0.28, y: candle.open },
                               { x: candle.idx + 0.28, y: candle.open }
                             ]}
-                            stroke="#67b2ff"
+                            stroke={colors.net}
                             strokeWidth={2}
                           />
                         ) : (
@@ -650,22 +660,22 @@ export function TransactionsView() {
                             x2={candle.idx + 0.28}
                             y1={candle.open}
                             y2={candle.close}
-                            fill={candle.close >= candle.open ? "rgba(86,211,161,0.35)" : "rgba(255,138,146,0.35)"}
-                            stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
+                            fill={candle.close >= candle.open ? `${colors.income}75` : `${colors.expense}75`}
+                            stroke={candle.close >= candle.open ? colors.income : colors.expense}
                           />
                         )
                       )}
                     </ComposedChart>
                   ) : (
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
-                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
+                      <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
                       <Legend />
-                      {showIncome && <Line type="monotone" dataKey="income" stroke="#56d3a1" dot={false} strokeWidth={2} isAnimationActive={false} />}
-                      {showExpense && <Line type="monotone" dataKey="expense" stroke="#ff8a92" dot={false} strokeWidth={2} isAnimationActive={false} />}
-                      {showNet && <Line type="monotone" dataKey="net" stroke="#67b2ff" dot={false} strokeWidth={2} isAnimationActive={false} />}
+                      {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
                     </LineChart>
                   )}
                 </ResponsiveContainer>
@@ -679,10 +689,10 @@ export function TransactionsView() {
           <div className="chart-panel">
             {canRenderBalanceChart ? (
               <div className="chart-box">
-                <ResponsiveContainer width="100%" height={180}>
+                <ResponsiveContainer width="100%" height={220}>
                   {primaryChartMode === "candles" ? (
                     <ComposedChart data={balanceCandleSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                       <XAxis
                         type="number"
                         dataKey="idx"
@@ -692,17 +702,15 @@ export function TransactionsView() {
                           const label = balanceCandleLabelByIdx.get(Number(idx)) ?? "";
                           return formatDateLabel(label, chartRange);
                         }}
-                        tick={{ fill: "#9fb8e9", fontSize: 12 }}
+                        tick={{ fill: colors.axisColor, fontSize: 12 }}
                         axisLine={false}
                         tickLine={false}
                       />
-                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                       <Tooltip
-                        formatter={(value) => money(typeof value === "number" ? value : Number(value))}
-                        contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }}
-                        labelFormatter={(label) => balanceCandleLabelByIdx.get(Number(label)) ?? ""}
+                        content={<CustomTooltip colors={colors} formatLabel={(l) => balanceCandleLabelByIdx.get(Number(l)) ?? String(l)} />}
                       />
-                      <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="close" stroke="transparent" dot={false} activeDot={false} {...anim} />
                       {balanceCandleSeries.map((candle) => (
                         <ReferenceLine
                           key={`balance-wick-${candle.label}`}
@@ -710,8 +718,8 @@ export function TransactionsView() {
                             { x: candle.idx, y: candle.low },
                             { x: candle.idx, y: candle.high }
                           ]}
-                          stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
-                          strokeWidth={1.4}
+                          stroke={candle.close >= candle.open ? colors.income : colors.expense}
+                          strokeWidth={2}
                         />
                       ))}
                       {balanceCandleSeries.map((candle) =>
@@ -722,7 +730,7 @@ export function TransactionsView() {
                               { x: candle.idx - 0.28, y: candle.open },
                               { x: candle.idx + 0.28, y: candle.open }
                             ]}
-                            stroke="#67b2ff"
+                            stroke={colors.net}
                             strokeWidth={2}
                           />
                         ) : (
@@ -732,29 +740,30 @@ export function TransactionsView() {
                             x2={candle.idx + 0.28}
                             y1={candle.open}
                             y2={candle.close}
-                            fill={candle.close >= candle.open ? "rgba(86,211,161,0.35)" : "rgba(255,138,146,0.35)"}
-                            stroke={candle.close >= candle.open ? "#56d3a1" : "#ff8a92"}
+                            fill={candle.close >= candle.open ? `${colors.income}75` : `${colors.expense}75`}
+                            stroke={candle.close >= candle.open ? colors.income : colors.expense}
                           />
                         )
                       )}
                     </ComposedChart>
                   ) : (
-                    <LineChart data={displayBalanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,171,230,0.28)" />
+                    <AreaChart data={displayBalanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                      <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                       <XAxis
                         dataKey="date"
                         tickFormatter={(value) => formatDateLabel(String(value), chartRange)}
                         minTickGap={24}
-                        tick={{ fill: "#9fb8e9", fontSize: 12 }}
+                        tick={{ fill: colors.axisColor, fontSize: 12 }}
                         axisLine={false}
                         tickLine={false}
                       />
-                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: "#9fb8e9", fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip formatter={(value) => money(typeof value === "number" ? value : Number(value))} contentStyle={{ background: "#0f1d43", border: "1px solid #2f61c0", borderRadius: 10 }} />
-                      <Line type="monotone" dataKey="balance" stroke="#ffb26b" dot={false} strokeWidth={2.5} isAnimationActive={false} />
-                      <ReferenceLine x={today} stroke="rgba(103,178,255,0.65)" strokeDasharray="4 4" />
-                      {displayBalanceSeries.length > 18 ? <Brush dataKey="date" height={18} stroke="#2f61c0" travellerWidth={8} /> : null}
-                    </LineChart>
+                      <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatDateLabel(String(l), chartRange)} />} />
+                      <Area type={visuals.curveType} dataKey="balance" stroke={colors.balance} fill="url(#grad-balance)" strokeWidth={2.5} activeDot={<CustomActiveDot />} {...anim} />
+                      <ReferenceLine x={today} stroke={colors.net} strokeWidth={2} strokeDasharray="4 4" label={{ value: "Today", position: "top", fill: colors.axisColor, fontSize: 11 }} />
+                      {displayBalanceSeries.length > 18 ? <Brush dataKey="date" height={18} stroke={colors.brushStroke} travellerWidth={8} /> : null}
+                    </AreaChart>
                   )}
                 </ResponsiveContainer>
               </div>

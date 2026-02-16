@@ -4,8 +4,11 @@ import {
   byCategory,
   cashflowTransactions,
   calculateDashboardMetrics,
+  calculateFinancialHealthScore,
   cashflowSeries,
+  categoryVarianceSeries,
   evaluateScenario,
+  netWorthSeries,
   postedTransactionsAsOf,
   localIsoDate,
   scenarioImpactTransactions
@@ -14,7 +17,11 @@ import type { CreditCard, DashboardMetrics, RetirementEntry, Scenario, Subscript
 import type { BankAccount, UiPreferences } from "../domain/models";
 
 type AppView = "dashboard" | "transactions" | "subscriptions" | "cards" | "banks" | "scenarios" | "retirement" | "customize";
-const IMPORT_CUTOFF_DATE = "2026-02-01";
+const IMPORT_CUTOFF_DATE = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 90);
+  return localIsoDate(d);
+})();
 
 function isImportedTransaction(transaction: Transaction) {
   return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
@@ -207,14 +214,21 @@ export function useDashboardData() {
   const cards = useFinanceStore((state) => state.cards);
   const metrics = useFinanceStore((state) => state.metrics);
   const today = localIsoDate();
-  const postedTransactions = postedTransactionsAsOf(cashflowTransactions(transactions, cards), today);
+  const cashflowTransactionsAllDates = cashflowTransactions(transactions, cards);
+  const postedTransactions = postedTransactionsAsOf(cashflowTransactionsAllDates, today);
+  const banks = useFinanceStore((state) => state.banks);
+  const retirementEntries = useFinanceStore((state) => state.retirementEntries);
+
   return {
     categorySpend: byCategory(postedTransactions),
-    cashflow: cashflowSeries(postedTransactions),
+    cashflow: cashflowSeries(cashflowTransactionsAllDates),
     scenarioOutcomes: scenarios.map((scenario) => ({
       name: scenario.name,
       ...evaluateScenario(scenario, metrics.netCashflow, metrics.monthlySubscriptions, cards)
-    }))
+    })),
+    healthScore: calculateFinancialHealthScore(metrics),
+    spendingPulse: categoryVarianceSeries(cashflowTransactionsAllDates),
+    netWorth: netWorthSeries(transactions, banks, cards, retirementEntries),
   };
 }
 

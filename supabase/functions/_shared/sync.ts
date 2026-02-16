@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { plaidRequest, type PlaidConfig } from "./plaid.ts";
-const IMPORT_CUTOFF_DATE = "2026-02-01";
+const IMPORT_CUTOFF_DATE = "2026-02-12";
 
 type ConnectionRow = {
   owner_id: string;
@@ -116,6 +116,17 @@ export async function syncConnectionTransactions(args: {
   let addedCount = 0;
   let modifiedCount = 0;
   let removedCount = 0;
+
+  // Enforce official bank-import start date on every sync.
+  const { count: prunedCount, error: pruneError } = await supabase
+    .from("finance_records")
+    .delete({ count: "exact" })
+    .eq("owner_id", ownerId)
+    .eq("collection", "transactions")
+    .like("id", `bank-feed:${connection.connection_id}:%`)
+    .lt("data->>date", IMPORT_CUTOFF_DATE);
+  if (pruneError) throw pruneError;
+  removedCount += prunedCount ?? 0;
 
   while (hasMore) {
     const syncResult = await plaidRequest<PlaidSyncResponse>(plaid, "/transactions/sync", {

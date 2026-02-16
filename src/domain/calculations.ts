@@ -1,4 +1,16 @@
-import type { BankAccount, CreditCard, DashboardMetrics, RetirementEntry, Scenario, Subscription, Transaction } from "./models";
+import type {
+  BankAccount,
+  CategoryVariance,
+  CreditCard,
+  DashboardMetrics,
+  FinancialHealthScore,
+  HealthSubScore,
+  NetWorthPoint,
+  RetirementEntry,
+  Scenario,
+  Subscription,
+  Transaction,
+} from "./models";
 
 export function localIsoDate(date = new Date()): string {
   const year = date.getFullYear();
@@ -85,14 +97,16 @@ export function calculateDashboardMetrics(
   const income = postedCashflowTransactions.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
   const expenses = postedCashflowTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
   const retirementBalance = retirementEntries[0]?.balance ?? 0;
+  const totalCreditBalance = creditCards.reduce((sum, card) => sum + card.balance - (accountDeltas.get(card.id) ?? 0), 0);
+  const totalLimit = creditCards.reduce((sum, card) => sum + card.limitAmount, 0);
   return {
     income,
     expenses,
     netCashflow: income - expenses,
     monthlySubscriptions: calculateMonthlySubscriptionCost(subscriptions),
-    totalCreditBalance: creditCards.reduce((sum, card) => sum + card.balance - (accountDeltas.get(card.id) ?? 0), 0),
+    totalCreditBalance,
     bankCashPosition: bankAccounts.reduce((sum, account) => sum + account.currentBalance + (accountDeltasExcludingImported.get(account.id) ?? 0), 0),
-    averageUtilizationPct: calculateUtilization(creditCards),
+    averageUtilizationPct: totalLimit > 0 ? (totalCreditBalance / totalLimit) * 100 : 0,
     retirementBalance,
     retirementProjected12m: calculateRetirementProjection(retirementEntries)
   };
@@ -255,6 +269,226 @@ export function monthlyCandlestickSeries(transactions: Transaction[]) {
       month,
       ...values
     }));
+}
+
+// --- Financial Health Score ---
+
+export function savingsRate(income: number, expenses: number): number {
+  if (income <= 0) return 0;
+  return Math.max(0, Math.min(100, ((income - expenses) / income) * 100));
+}
+
+export function debtToIncomeRatio(totalDebt: number, monthlyIncome: number): number {
+  if (monthlyIncome <= 0) return 100;
+  return Math.min(100, (totalDebt / monthlyIncome) * 100);
+}
+
+function rateSubScore(value: number, goodThreshold: number, fairThreshold: number, invert = false): Omit<HealthSubScore, "label" | "weight" | "weighted"> {
+  let normalized: number;
+  if (invert) {
+    // Lower is better (e.g. debt-to-income, utilization)
+    if (value <= goodThreshold) normalized = 100;
+    else if (value >= fairThreshold) normalized = 0;
+    else normalized = 100 - ((value - goodThreshold) / (fairThreshold - goodThreshold)) * 100;
+  } else {
+    // Higher is better (e.g. savings rate)
+    if (value >= goodThreshold) normalized = 100;
+    else if (value <= fairThreshold) normalized = 0;
+    else normalized = ((value - fairThreshold) / (goodThreshold - fairThreshold)) * 100;
+  }
+  const clamped = Math.max(0, Math.min(100, normalized));
+  return {
+    value: clamped,
+    rating: clamped >= 70 ? "good" : clamped >= 40 ? "fair" : "poor",
+  };
+}
+
+export function calculateFinancialHealthScore(metrics: DashboardMetrics): FinancialHealthScore {
+  const sr = savingsRate(metrics.income, metrics.expenses);
+  const savingsResult = rateSubScore(sr, 20, 0); // 20%+ savings = good
+
+  const utilization = metrics.averageUtilizationPct;
+  const utilizationResult = rateSubScore(utilization, 30, 80, true); // <30% = good
+
+  const dti = debtToIncomeRatio(metrics.totalCreditBalance, metrics.income || 1);
+  const dtiResult = rateSubScore(dti, 20, 50, true); // <20% = good
+
+  const monthsOfReserve = metrics.income > 0 ? (metrics.bankCashPosition / metrics.income) * 1 : 0; // months
+  const cashReserveResult = rateSubScore(monthsOfReserve, 3, 0); // 3+ months = good
+
+  const retirementGrowth = metrics.retirementBalance > 0
+    ? ((metrics.retirementProjected12m - metrics.retirementBalance) / metrics.retirementBalance) * 100
+    : 0;
+  const retirementResult = rateSubScore(retirementGrowth, 7, 0); // 7%+ annual = good
+
+  const breakdown: HealthSubScore[] = [
+    { label: "Savings Rate", weight: 0.25, ...savingsResult, weighted: savingsResult.value * 0.25 },
+    { label: "Credit Utilization", weight: 0.20, ...utilizationResult, weighted: utilizationResult.value * 0.20 },
+    { label: "Debt-to-Income", weight: 0.20, ...dtiResult, weighted: dtiResult.value * 0.20 },
+    { label: "Cash Reserve", weight: 0.20, ...cashReserveResult, weighted: cashReserveResult.value * 0.20 },
+    { label: "Retirement Growth", weight: 0.15, ...retirementResult, weighted: retirementResult.value * 0.15 },
+  ];
+
+  const score = Math.round(breakdown.reduce((sum, sub) => sum + sub.weighted, 0));
+  const rating = score >= 80 ? "excellent" : score >= 60 ? "good" : score >= 40 ? "fair" : "poor";
+
+  return { score, rating, breakdown };
+}
+
+// --- Spending Pulse (Month-over-Month Category Variance) ---
+
+export function categoryRollingAverage(
+  transactions: Transaction[],
+  endMonth: string,
+  windowMonths = 3
+): Map<string, number> {
+  const endDate = new Date(`${endMonth}-01T00:00:00`);
+  const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - windowMonths, 1);
+  const startMonth = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}`;
+
+  const map = new Map<string, number[]>();
+  transactions
+    .filter((tx) => tx.type === "expense")
+    .filter((tx) => {
+      const txMonth = tx.date.slice(0, 7);
+      return txMonth >= startMonth && txMonth < endMonth;
+    })
+    .forEach((tx) => {
+      const list = map.get(tx.category) ?? [];
+      list.push(tx.amount);
+      map.set(tx.category, list);
+    });
+
+  const averages = new Map<string, number>();
+  map.forEach((amounts, category) => {
+    averages.set(category, amounts.reduce((a, b) => a + b, 0) / windowMonths);
+  });
+  return averages;
+}
+
+export function categoryVarianceSeries(
+  transactions: Transaction[],
+  referenceMonth?: string
+): CategoryVariance[] {
+  const now = new Date();
+  const currentMonth = referenceMonth ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentDate = new Date(`${currentMonth}-01T00:00:00`);
+  const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+
+  const rollingAvg = categoryRollingAverage(transactions, currentMonth, 3);
+
+  const currentSpend = new Map<string, number>();
+  const prevSpend = new Map<string, number>();
+
+  transactions
+    .filter((tx) => tx.type === "expense")
+    .forEach((tx) => {
+      const txMonth = tx.date.slice(0, 7);
+      if (txMonth === currentMonth) {
+        currentSpend.set(tx.category, (currentSpend.get(tx.category) ?? 0) + tx.amount);
+      } else if (txMonth === prevMonth) {
+        prevSpend.set(tx.category, (prevSpend.get(tx.category) ?? 0) + tx.amount);
+      }
+    });
+
+  const allCategories = new Set([...currentSpend.keys(), ...prevSpend.keys()]);
+  const result: CategoryVariance[] = [];
+
+  allCategories.forEach((category) => {
+    const current = currentSpend.get(category) ?? 0;
+    const previous = prevSpend.get(category) ?? 0;
+    const change = current - previous;
+    const changePct = previous > 0 ? (change / previous) * 100 : current > 0 ? 100 : 0;
+    const avg = rollingAvg.get(category) ?? 0;
+    const anomaly = avg > 0 && current > avg * 1.5;
+
+    result.push({ category, current, previous, change, changePct, anomaly });
+  });
+
+  return result.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+}
+
+// --- Net Worth Timeline ---
+
+export function netWorthSeries(
+  transactions: Transaction[],
+  banks: BankAccount[],
+  cards: CreditCard[],
+  retirementEntries: RetirementEntry[]
+): NetWorthPoint[] {
+  // Get the total current balances as anchors
+  const totalBankBalance = banks.reduce((sum, b) => sum + b.currentBalance, 0);
+  const totalCardDebt = cards.reduce((sum, c) => sum + c.balance, 0);
+  const latestRetirement = retirementEntries[0]?.balance ?? 0;
+
+  // Build monthly transaction deltas
+  const monthlyDeltas = new Map<string, { bankDelta: number; cardDelta: number }>();
+  const cardIds = new Set(cards.map((c) => c.id));
+  const bankIds = new Set(banks.map((b) => b.id));
+
+  transactions.forEach((tx) => {
+    const month = tx.date.slice(0, 7);
+    const entry = monthlyDeltas.get(month) ?? { bankDelta: 0, cardDelta: 0 };
+    const delta = tx.type === "income" ? tx.amount : -tx.amount;
+
+    if (cardIds.has(tx.account)) {
+      entry.cardDelta += delta;
+    } else if (bankIds.has(tx.account) || tx.account === "unassigned") {
+      entry.bankDelta += delta;
+    }
+    monthlyDeltas.set(month, entry);
+  });
+
+  // Build retirement balance by month
+  const retirementByMonth = new Map<string, number>();
+  retirementEntries.forEach((entry) => {
+    retirementByMonth.set(entry.date.slice(0, 7), entry.balance);
+  });
+
+  const months = [...monthlyDeltas.keys()].sort();
+  if (months.length === 0) {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return [{
+      month: currentMonth,
+      assets: totalBankBalance + latestRetirement,
+      liabilities: totalCardDebt,
+      net: totalBankBalance + latestRetirement - totalCardDebt,
+    }];
+  }
+
+  // Work backwards from current balances to reconstruct history
+  const result: NetWorthPoint[] = [];
+  let runningBankDelta = 0;
+  let runningCardDelta = 0;
+
+  // Sum all deltas first
+  const totalBankDelta = [...monthlyDeltas.values()].reduce((s, d) => s + d.bankDelta, 0);
+  const totalCardDelta2 = [...monthlyDeltas.values()].reduce((s, d) => s + d.cardDelta, 0);
+
+  // Start from reconstructed beginning
+  let bankRunning = totalBankBalance - totalBankDelta;
+  let cardRunning = totalCardDebt + totalCardDelta2; // card deltas are negative for payments
+
+  months.forEach((month) => {
+    const delta = monthlyDeltas.get(month)!;
+    bankRunning += delta.bankDelta;
+    cardRunning -= delta.cardDelta;
+
+    const retirement = retirementByMonth.get(month) ?? latestRetirement;
+    const assets = Math.max(0, bankRunning) + retirement;
+    const liabilities = Math.max(0, cardRunning);
+
+    result.push({
+      month,
+      assets,
+      liabilities,
+      net: assets - liabilities,
+    });
+  });
+
+  return result;
 }
 
 export function scenarioImpactTransactions(scenarios: Scenario[]) {
