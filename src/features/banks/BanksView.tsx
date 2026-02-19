@@ -186,8 +186,10 @@ export function BanksView() {
     void loadLinkToken();
   }, [bankFeedEnabled, isPlaidFeed, loadLinkToken]);
 
+  const isHosted = db.isHostedDataProvider();
+
   useEffect(() => {
-    if (!bankFeedEnabled) {
+    if (!bankFeedEnabled || !isHosted) {
       setBankFeedAuthDebug(null);
       return;
     }
@@ -209,7 +211,7 @@ export function BanksView() {
         setBankFeedAuthDebug(error instanceof Error ? `Auth debug error: ${error.message}` : "Auth debug unavailable.");
       }
     })();
-  }, [bankFeedEnabled, bankFeedStatus]);
+  }, [bankFeedEnabled, isHosted, bankFeedStatus]);
 
   async function connectSimpleFin() {
     const setupToken = simpleFinSetupToken.trim();
@@ -277,7 +279,11 @@ export function BanksView() {
               {isSimpleFinFeed ? "SimpleFIN Connected Sync" : "Plaid Connected Sync"}
             </strong>
           </div>
-          <p className="muted">Securely import posted bank transactions and balances from your connected institution. Tokens are never stored in the browser.</p>
+          <p className="muted">
+            {isHosted
+              ? "Securely import posted bank transactions and balances from your connected institution. Tokens are never stored in the browser."
+              : "Import posted bank transactions and balances from SimpleFIN. Connection data is stored locally in your browser."}
+          </p>
           {isSimpleFinFeed ? (
             <>
               <p className="muted">

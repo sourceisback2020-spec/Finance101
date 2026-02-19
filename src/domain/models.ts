@@ -5,6 +5,8 @@ export type BankAccountType = "checking" | "savings" | "brokerage" | "cash";
 export type ThemePreset = "midnight" | "emerald" | "sunset";
 export type DensityPreset = "cozy" | "compact";
 export type BackgroundPreset = "aurora" | "mesh" | "orbital" | "topography";
+export type BudgetPeriod = "monthly" | "weekly" | "yearly";
+export type GoalType = "savings" | "debt-payoff" | "investment" | "custom";
 
 export type Transaction = {
   id: string;
@@ -73,6 +75,27 @@ export type BankAccount = {
   imageDataUrl: string;
 };
 
+export type Budget = {
+  id: string;
+  category: string;
+  amount: number;
+  period: BudgetPeriod;
+  startDate: string;
+  isActive: number;
+};
+
+export type Goal = {
+  id: string;
+  name: string;
+  type: GoalType;
+  targetAmount: number;
+  currentAmount: number;
+  deadline: string;
+  linkedAccountId: string;
+  note: string;
+  isActive: number;
+};
+
 export type UiPreferences = {
   theme: ThemePreset;
   background: BackgroundPreset;
@@ -91,6 +114,12 @@ export type DashboardMetrics = {
   averageUtilizationPct: number;
   retirementBalance: number;
   retirementProjected12m: number;
+  savingsRatePct: number;
+  topMerchant: { name: string; total: number } | null;
+  biggestExpenseCategory: { name: string; total: number } | null;
+  daysUntilNextBill: number | null;
+  nextBillName: string | null;
+  nextBillAmount: number | null;
 };
 
 export type HealthSubScore = {
@@ -123,6 +152,39 @@ export type NetWorthPoint = {
   net: number;
 };
 
+export type BudgetStatus = {
+  budget: Budget;
+  spent: number;
+  remaining: number;
+  pctUsed: number;
+  onTrack: boolean;
+};
+
+export type SpendingInsight = {
+  type: "overspend" | "savings-opportunity" | "anomaly" | "streak" | "tip";
+  title: string;
+  description: string;
+  severity: "info" | "warning" | "success";
+  category?: string;
+  amount?: number;
+};
+
+export type MonthlyTrend = {
+  month: string;
+  income: number;
+  expense: number;
+  savings: number;
+  savingsRate: number;
+};
+
+export type GoalProgress = {
+  goal: Goal;
+  pctComplete: number;
+  monthlyNeeded: number;
+  onTrack: boolean;
+  projectedDate: string | null;
+};
+
 export type FinanceBackup = {
   format: "local-finance-backup";
   version: number;
@@ -135,6 +197,8 @@ export type FinanceBackup = {
     banks: BankAccount[];
     scenarios: Scenario[];
     retirementEntries: RetirementEntry[];
+    budgets: Budget[];
+    goals: Goal[];
     uiPreferences: UiPreferences;
   };
   rendererSettings?: {

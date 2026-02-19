@@ -13,6 +13,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  Treemap,
   XAxis,
   YAxis
 } from "recharts";
@@ -26,11 +27,20 @@ import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 import { HealthScoreGauge } from "./HealthScoreGauge";
 import { SpendingPulseChart } from "./SpendingPulseChart";
 import { NetWorthChart } from "./NetWorthChart";
+import { InsightCards } from "./InsightCards";
+import { BudgetSummaryPanel } from "./BudgetSummaryPanel";
+import { SpendingForecastPanel } from "./SpendingForecastPanel";
+import { WaterfallChart } from "./WaterfallChart";
 
 type ChartRange = "3M" | "6M" | "1Y" | "ALL";
+type CategoryChartMode = "pie" | "treemap";
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
+function moneyShort(value: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
 }
 
 function rangeStart(range: ChartRange, todayIso: string) {
@@ -46,11 +56,34 @@ function formatMonthLabel(month: string) {
   return `${monthNumber}/${year.slice(-2)}`;
 }
 
+// Custom treemap content renderer
+function TreemapContent(props: {
+  x?: number; y?: number; width?: number; height?: number;
+  name?: string; amount?: number; fill?: string;
+}) {
+  const { x = 0, y = 0, width = 0, height = 0, name, amount, fill } = props;
+  if (width < 40 || height < 30) return null;
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={4} fill={fill} stroke="rgba(5,10,26,0.85)" strokeWidth={2} />
+      <text x={x + width / 2} y={y + height / 2 - 6} textAnchor="middle" fill="#fff" fontSize={11} fontWeight={600}>
+        {name}
+      </text>
+      <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize={10}>
+        {moneyShort(amount ?? 0)}
+      </text>
+    </g>
+  );
+}
+
 export function DashboardView() {
   const metrics = useFinanceStore((state) => state.metrics);
   const subscriptions = useFinanceStore((state) => state.subscriptions);
   const banks = useFinanceStore((state) => state.banks);
-  const { categorySpend, cashflow, scenarioOutcomes, healthScore, spendingPulse, netWorth } = useDashboardData();
+  const {
+    categorySpend, cashflow, scenarioOutcomes, healthScore, spendingPulse, netWorth,
+    budgetStatuses, insights, monthlyTrends, forecast
+  } = useDashboardData();
   const { colors, visuals } = useChartTheme();
   const anim = useChartAnimation();
   const [chartRange, setChartRange] = useState<ChartRange>("6M");
@@ -58,6 +91,7 @@ export function DashboardView() {
   const [showExpense, setShowExpense] = useState(true);
   const [showNet, setShowNet] = useState(true);
   const [areaMode, setAreaMode] = useState(false);
+  const [categoryChartMode, setCategoryChartMode] = useState<CategoryChartMode>("pie");
   const today = localIsoDate();
   const start = rangeStart(chartRange, today);
   const endMonth = today.slice(0, 7);
@@ -68,6 +102,16 @@ export function DashboardView() {
   const upcomingRenewals = [...subscriptions].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate)).slice(0, 4);
   const largestBank = [...banks].sort((a, b) => b.currentBalance - a.currentBalance)[0];
 
+  // Treemap data
+  const treemapData = useMemo(() =>
+    categorySpend.map((entry, index) => ({
+      name: entry.name,
+      amount: entry.amount,
+      fill: colors.piePalette[index % colors.piePalette.length],
+    })),
+    [categorySpend, colors.piePalette]
+  );
+
   return (
     <section className="stack-lg">
       <header>
@@ -77,19 +121,36 @@ export function DashboardView() {
 
       <HealthScoreGauge healthScore={healthScore} />
 
+      <InsightCards insights={insights} />
+
       <div className="kpi-grid">
         <article className="kpi-card"><h3>Posted Income</h3><strong className="value-positive">{money(metrics.income)}</strong></article>
         <article className="kpi-card"><h3>Posted Expenses</h3><strong className="value-negative">{money(metrics.expenses)}</strong></article>
         <article className="kpi-card"><h3>Net Cashflow</h3><strong className={metrics.netCashflow >= 0 ? "value-positive" : "value-negative"}>{money(metrics.netCashflow)}</strong></article>
+        <article className="kpi-card"><h3>Savings Rate</h3><strong className={metrics.savingsRatePct >= 20 ? "value-positive" : metrics.savingsRatePct >= 10 ? "value-warning" : "value-negative"}>{metrics.savingsRatePct.toFixed(1)}%</strong></article>
         <article className="kpi-card"><h3>Subscriptions / Mo</h3><strong className="value-warning">{money(metrics.monthlySubscriptions)}</strong></article>
         <article className="kpi-card"><h3>Credit Card Debt</h3><strong className="value-negative">{money(metrics.totalCreditBalance)}</strong></article>
         <article className="kpi-card"><h3>Bank Cash Position</h3><strong className="value-positive">{money(metrics.bankCashPosition)}</strong></article>
         <article className="kpi-card"><h3>Utilization</h3><strong className={metrics.averageUtilizationPct > 70 ? "value-negative" : metrics.averageUtilizationPct > 30 ? "value-warning" : "value-positive"}>{metrics.averageUtilizationPct.toFixed(1)}%</strong></article>
         <article className="kpi-card"><h3>401k Balance</h3><strong className="value-positive">{money(metrics.retirementBalance)}</strong></article>
         <article className="kpi-card"><h3>401k in 12 Months</h3><strong className="value-positive">{money(metrics.retirementProjected12m)}</strong></article>
+        {metrics.topMerchant && (
+          <article className="kpi-card"><h3>Top Merchant</h3><strong className="value-negative">{metrics.topMerchant.name}<br /><span style={{ fontSize: 13 }}>{money(metrics.topMerchant.total)}</span></strong></article>
+        )}
+        {metrics.biggestExpenseCategory && (
+          <article className="kpi-card"><h3>Top Category</h3><strong className="value-negative">{metrics.biggestExpenseCategory.name}<br /><span style={{ fontSize: 13 }}>{money(metrics.biggestExpenseCategory.total)}</span></strong></article>
+        )}
+        {metrics.nextBillName && metrics.nextBillAmount !== null && (
+          <article className="kpi-card"><h3>Next Bill</h3><strong className="value-warning">{metrics.nextBillName}<br /><span style={{ fontSize: 13 }}>{money(metrics.nextBillAmount)} in {metrics.daysUntilNextBill}d</span></strong></article>
+        )}
       </div>
 
       <NetWorthChart data={netWorth} />
+
+      <div className="chart-grid">
+        <BudgetSummaryPanel statuses={budgetStatuses} />
+        <SpendingForecastPanel trends={monthlyTrends} forecast={forecast} />
+      </div>
 
       <div className="chart-grid">
         <article className="panel chart-panel">
@@ -152,9 +213,25 @@ export function DashboardView() {
         </article>
 
         <article className="panel chart-panel">
-          <div className="panel-head"><h3>Spend by Category</h3></div>
+          <div className="panel-head">
+            <h3>Spend by Category</h3>
+            <div className="toggle-group">
+              <button className={`chip-btn ${categoryChartMode === "pie" ? "active-chip" : ""}`} onClick={() => setCategoryChartMode("pie")}>Pie</button>
+              <button className={`chip-btn ${categoryChartMode === "treemap" ? "active-chip" : ""}`} onClick={() => setCategoryChartMode("treemap")}>Treemap</button>
+            </div>
+          </div>
           {categorySpend.length === 0 ? (
             <div className="chart-empty">No expense categories yet. Add expense transactions to populate this chart.</div>
+          ) : categoryChartMode === "treemap" ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <Treemap
+                data={treemapData}
+                dataKey="amount"
+                nameKey="name"
+                content={<TreemapContent />}
+                {...anim}
+              />
+            </ResponsiveContainer>
           ) : (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
@@ -193,6 +270,8 @@ export function DashboardView() {
           )}
         </article>
       </div>
+
+      <WaterfallChart income={metrics.income} categorySpend={categorySpend} netCashflow={metrics.netCashflow} />
 
       <SpendingPulseChart data={spendingPulse} />
 

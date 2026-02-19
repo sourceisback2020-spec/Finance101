@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { AuthView } from "./features/auth/AuthView";
 import { AiCommandBox } from "./features/ai/AiCommandBox";
 import { BanksView } from "./features/banks/BanksView";
+import { BudgetsView } from "./features/budgets/BudgetsView";
 import { CreditCardsView } from "./features/creditCards/CreditCardsView";
 import { CustomizeView } from "./features/customize/CustomizeView";
 import { DashboardView } from "./features/dashboard/DashboardView";
+import { GoalsView } from "./features/goals/GoalsView";
 import { RetirementView } from "./features/retirement401k/RetirementView";
 import { ScenariosView } from "./features/scenarios/ScenariosView";
 import { SubscriptionsView } from "./features/subscriptions/SubscriptionsView";
@@ -229,6 +231,8 @@ function App() {
       {view === "subscriptions" && <SubscriptionsView />}
       {view === "cards" && <CreditCardsView />}
       {view === "banks" && <BanksView />}
+      {view === "budgets" && <BudgetsView />}
+      {view === "goals" && <GoalsView />}
       {view === "scenarios" && <ScenariosView />}
       {view === "retirement" && <RetirementView />}
       {view === "customize" && <CustomizeView />}

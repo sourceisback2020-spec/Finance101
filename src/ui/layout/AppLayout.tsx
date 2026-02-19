@@ -1,8 +1,8 @@
-import { BarChart3, CreditCard, DollarSign, Landmark, Menu, Palette, PiggyBank, Repeat, Sparkles } from "lucide-react";
+import { BarChart3, CreditCard, DollarSign, Landmark, Menu, Palette, PiggyBank, Repeat, Sparkles, Target, Wallet } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useAppearance } from "../theme/ThemeContext";
 
-type AppView = "dashboard" | "transactions" | "subscriptions" | "cards" | "banks" | "scenarios" | "retirement" | "customize";
+type AppView = "dashboard" | "transactions" | "subscriptions" | "cards" | "banks" | "budgets" | "goals" | "scenarios" | "retirement" | "customize";
 
 type Props = {
   view: AppView;
@@ -21,6 +21,8 @@ const nav = [
   { id: "subscriptions", label: "Subscriptions", icon: Repeat },
   { id: "cards", label: "Credit Cards", icon: CreditCard },
   { id: "banks", label: "Bank Accounts", icon: PiggyBank },
+  { id: "budgets", label: "Budgets", icon: Wallet },
+  { id: "goals", label: "Goals", icon: Target },
   { id: "scenarios", label: "What-If Scenarios", icon: Sparkles },
   { id: "retirement", label: "401k Tracker", icon: Landmark },
   { id: "customize", label: "Customize UI", icon: Palette }

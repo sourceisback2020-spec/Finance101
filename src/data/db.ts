@@ -1,13 +1,16 @@
 import type {
   BankAccount,
+  Budget,
   CreditCard,
   FinanceBackup,
+  Goal,
   RetirementEntry,
   Scenario,
   Subscription,
   Transaction,
   UiPreferences
 } from "../domain/models";
+import { IMPORT_CUTOFF_DATE } from "../domain/calculations";
 import { getHostedAccessToken, getHostedUser, invokeHostedFunction } from "./supabaseAuth";
 
 function hasApi() {
@@ -281,6 +284,8 @@ function parseBackupPayload(raw: string) {
       banks: Array.isArray(data.banks) ? data.banks : [],
       scenarios: Array.isArray(data.scenarios) ? data.scenarios.map(normalizeImportedScenario) : [],
       retirementEntries: Array.isArray(data.retirementEntries) ? data.retirementEntries : [],
+      budgets: Array.isArray(data.budgets) ? data.budgets : [],
+      goals: Array.isArray(data.goals) ? data.goals : [],
       uiPreferences: { ...defaultUiPreferences, ...(data.uiPreferences ?? {}) }
     },
     rendererSettings: parsed.rendererSettings
@@ -529,6 +534,74 @@ export const db = {
     writeList("finance:retirementEntries", next);
     return true;
   },
+  listBudgets: async () => {
+    if (hasHostedApi()) {
+      try {
+        return await hostedList<Budget>("budgets");
+      } catch (error) {
+        console.error("Hosted listBudgets failed, using local fallback.", error);
+      }
+    }
+    return readList<Budget>("finance:budgets");
+  },
+  upsertBudget: async (budget: Budget) => {
+    if (hasHostedApi()) {
+      try {
+        return await hostedUpsert("budgets", budget);
+      } catch (error) {
+        console.error("Hosted upsertBudget failed, using local fallback.", error);
+      }
+    }
+    const next = upsertById(readList<Budget>("finance:budgets"), budget);
+    writeList("finance:budgets", next);
+    return true;
+  },
+  deleteBudget: async (id: string) => {
+    if (hasHostedApi()) {
+      try {
+        return await hostedDelete("budgets", id);
+      } catch (error) {
+        console.error("Hosted deleteBudget failed, using local fallback.", error);
+      }
+    }
+    const next = deleteById(readList<Budget>("finance:budgets"), id);
+    writeList("finance:budgets", next);
+    return true;
+  },
+  listGoals: async () => {
+    if (hasHostedApi()) {
+      try {
+        return await hostedList<Goal>("goals");
+      } catch (error) {
+        console.error("Hosted listGoals failed, using local fallback.", error);
+      }
+    }
+    return readList<Goal>("finance:goals");
+  },
+  upsertGoal: async (goal: Goal) => {
+    if (hasHostedApi()) {
+      try {
+        return await hostedUpsert("goals", goal);
+      } catch (error) {
+        console.error("Hosted upsertGoal failed, using local fallback.", error);
+      }
+    }
+    const next = upsertById(readList<Goal>("finance:goals"), goal);
+    writeList("finance:goals", next);
+    return true;
+  },
+  deleteGoal: async (id: string) => {
+    if (hasHostedApi()) {
+      try {
+        return await hostedDelete("goals", id);
+      } catch (error) {
+        console.error("Hosted deleteGoal failed, using local fallback.", error);
+      }
+    }
+    const next = deleteById(readList<Goal>("finance:goals"), id);
+    writeList("finance:goals", next);
+    return true;
+  },
   listBanks: async () => {
     if (hasApi()) return window.financeApi.listBanks();
     if (hasHostedApi()) {
@@ -567,12 +640,22 @@ export const db = {
     return true;
   },
   getBankFeedProvider: (): BankFeedProvider => {
-    if (!hasHostedApi() || !BANK_FEED_ENABLED) return "none";
-    if (BANK_FEED_PROVIDER === "plaid") return "plaid";
+    // Hosted mode: check for full backend availability
+    if (hasHostedApi() && BANK_FEED_ENABLED) {
+      if (BANK_FEED_PROVIDER === "plaid") return "plaid";
+      if (BANK_FEED_PROVIDER === "simplefin") return "simplefin";
+      return "none";
+    }
+    // Local/browser mode: SimpleFin works client-side via dev proxy
     if (BANK_FEED_PROVIDER === "simplefin") return "simplefin";
     return "none";
   },
-  isBankFeedEnabled: () => hasHostedApi() && BANK_FEED_ENABLED,
+  isBankFeedEnabled: () => {
+    if (hasHostedApi() && BANK_FEED_ENABLED) return true;
+    // SimpleFin available in local mode (client-side via dev proxy)
+    return BANK_FEED_PROVIDER === "simplefin";
+  },
+  isHostedDataProvider: () => hasHostedApi(),
   createBankFeedLinkToken: async () => {
     if (!hasHostedApi() || !BANK_FEED_ENABLED) {
       throw new Error("Bank feeds are only available in hosted mode.");
@@ -586,16 +669,59 @@ export const db = {
     return invokeHostedFunction<BankFeedExchangeResponse>("bank-feed-exchange", { publicToken });
   },
   connectSimpleFinBridge: async (setupToken: string) => {
-    if (!hasHostedApi() || !BANK_FEED_ENABLED) {
-      throw new Error("Bank feeds are only available in hosted mode.");
+    // Hosted mode: delegate to Supabase Edge Function
+    if (hasHostedApi() && BANK_FEED_ENABLED) {
+      return invokeHostedFunction<SimpleFinConnectResponse>("bank-feed-connect-simplefin", { setupToken });
     }
-    return invokeHostedFunction<SimpleFinConnectResponse>("bank-feed-connect-simplefin", { setupToken });
+    // Local mode: client-side SimpleFin via dev proxy
+    const { connectSimpleFinLocal } = await import("../services/simplefin/client");
+    const result = await connectSimpleFinLocal(setupToken);
+    // Persist bank accounts through the local data layer
+    let bankList = readList<BankAccount>("finance:banks");
+    for (const bank of result.banks) {
+      bankList = upsertById(bankList, bank);
+    }
+    writeList("finance:banks", bankList);
+    return {
+      connectionId: result.connectionId,
+      institutionName: result.institutionName,
+      accountsLinked: result.accountsLinked,
+    };
   },
   syncBankFeedTransactions: async () => {
-    if (!hasHostedApi() || !BANK_FEED_ENABLED) {
-      throw new Error("Bank feeds are only available in hosted mode.");
+    // Hosted mode: delegate to Supabase Edge Function
+    if (hasHostedApi() && BANK_FEED_ENABLED) {
+      return invokeHostedFunction<BankFeedSyncResponse>("bank-feed-sync");
     }
-    return invokeHostedFunction<BankFeedSyncResponse>("bank-feed-sync");
+    // Local mode: client-side SimpleFin sync via dev proxy
+    const { syncSimpleFinLocal } = await import("../services/simplefin/client");
+    const result = await syncSimpleFinLocal();
+
+    // Persist bank accounts
+    let bankList = readList<BankAccount>("finance:banks");
+    for (const bank of result.banks) {
+      bankList = upsertById(bankList, bank);
+    }
+    writeList("finance:banks", bankList);
+
+    // Persist transactions (upsert to avoid duplicates on re-sync)
+    let txList = readList<Transaction>("finance:transactions");
+    for (const tx of result.transactions) {
+      txList = upsertById(txList, tx);
+    }
+    // Prune imported transactions before the cutoff date
+    txList = txList.filter(
+      (tx) => !tx.id.startsWith("bank-feed:") || tx.date >= IMPORT_CUTOFF_DATE
+    );
+    writeList("finance:transactions", txList);
+
+    return {
+      added: result.added,
+      modified: result.modified,
+      removed: result.removed,
+      connections: result.connections,
+      syncedAt: result.syncedAt,
+    };
   },
   getUiPreferences: async () => {
     if (hasApi()) return window.financeApi.getUiPreferences();
@@ -653,6 +779,8 @@ export const db = {
         banks: await db.listBanks(),
         scenarios: await db.listScenarios(),
         retirementEntries: await db.listRetirementEntries(),
+        budgets: await db.listBudgets(),
+        goals: await db.listGoals(),
         uiPreferences: await db.getUiPreferences()
       },
       rendererSettings: {
@@ -678,6 +806,8 @@ export const db = {
       await replaceCollection(db.listBanks, db.deleteBank, db.upsertBank, backup.data.banks);
       await replaceCollection(db.listScenarios, db.deleteScenario, db.upsertScenario, backup.data.scenarios);
       await replaceCollection(db.listRetirementEntries, db.deleteRetirementEntry, db.upsertRetirementEntry, backup.data.retirementEntries);
+      await replaceCollection(db.listBudgets, db.deleteBudget, db.upsertBudget, backup.data.budgets);
+      await replaceCollection(db.listGoals, db.deleteGoal, db.upsertGoal, backup.data.goals);
       await db.setUiPreferences(backup.data.uiPreferences);
     } else {
       writeList("finance:transactions", backup.data.transactions);
@@ -686,6 +816,8 @@ export const db = {
       writeList("finance:banks", backup.data.banks);
       writeList("finance:scenarios", backup.data.scenarios);
       writeList("finance:retirementEntries", backup.data.retirementEntries);
+      writeList("finance:budgets", backup.data.budgets);
+      writeList("finance:goals", backup.data.goals);
       writeUiPreferences(backup.data.uiPreferences);
     }
 

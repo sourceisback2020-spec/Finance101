@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { cashflowSeries, cashflowTransactions, localIsoDate, postedTransactionsAsOf, transactionDeltaByAccount } from "../../domain/calculations";
+import { cashflowSeries, cashflowTransactions, IMPORT_CUTOFF_DATE, isImportedTransaction, localIsoDate, postedTransactionsAsOf, transactionDeltaByAccount } from "../../domain/calculations";
 import type { Transaction } from "../../domain/models";
 import { parseTransactionsCsv } from "../../services/importExport/csv";
 import { useFinanceStore } from "../../state/store";
@@ -29,11 +29,6 @@ type ChartRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 type PrimaryChartMode = "line" | "area" | "candles";
 type TransactionScope = "all" | "manual" | "imported";
 type TransactionTypeFilter = "all" | "income" | "expense";
-const IMPORT_CUTOFF_DATE = (() => {
-  const d = new Date();
-  d.setDate(d.getDate() - 90);
-  return localIsoDate(d);
-})();
 const TRANSACTIONS_PAGE_SIZE = 18;
 
 function getInitialState(defaultAccount = "unassigned"): Transaction {
@@ -58,10 +53,6 @@ function valueClass(value: number) {
   if (value > 0) return "value-positive";
   if (value < 0) return "value-negative";
   return "value-neutral";
-}
-
-function isImportedTransaction(transaction: Transaction) {
-  return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
 }
 
 function formatMonthLabel(month: string) {
@@ -269,9 +260,9 @@ export function TransactionsView() {
 
   const categoryOptions = useMemo(() => {
     const values = new Set<string>();
-    manualTransactions.forEach((tx) => values.add(tx.category));
+    transactions.forEach((tx) => values.add(tx.category));
     return [...values].sort((a, b) => a.localeCompare(b));
-  }, [manualTransactions]);
+  }, [transactions]);
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.toLowerCase();

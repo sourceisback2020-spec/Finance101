@@ -1,13 +1,19 @@
 import type {
   BankAccount,
+  Budget,
+  BudgetStatus,
   CategoryVariance,
   CreditCard,
   DashboardMetrics,
   FinancialHealthScore,
+  Goal,
+  GoalProgress,
   HealthSubScore,
+  MonthlyTrend,
   NetWorthPoint,
   RetirementEntry,
   Scenario,
+  SpendingInsight,
   Subscription,
   Transaction,
 } from "./models";
@@ -27,8 +33,15 @@ export function postedTransactionsAsOf(transactions: Transaction[], asOf = local
   return transactions.filter((tx) => isPostedTransaction(tx, asOf));
 }
 
+export const IMPORT_CUTOFF_DATE = "2026-02-10";
+
 export function isImportedTransaction(transaction: Transaction) {
   return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
+}
+
+export function isAllowedImportedDate(transaction: Transaction) {
+  if (!isImportedTransaction(transaction)) return true;
+  return transaction.date >= IMPORT_CUTOFF_DATE;
 }
 
 export function cashflowTransactions(transactions: Transaction[], creditCards: CreditCard[]) {
@@ -92,23 +105,66 @@ export function calculateDashboardMetrics(
   bankAccounts: BankAccount[]
 ): DashboardMetrics {
   const postedCashflowTransactions = postedCashflowTransactionsAsOf(transactions, creditCards);
-  const accountDeltas = transactionDeltaByAccount(transactions);
   const accountDeltasExcludingImported = transactionDeltaByAccount(transactions, localIsoDate(), { includeImported: false });
   const income = postedCashflowTransactions.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
   const expenses = postedCashflowTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
   const retirementBalance = retirementEntries[0]?.balance ?? 0;
-  const totalCreditBalance = creditCards.reduce((sum, card) => sum + card.balance - (accountDeltas.get(card.id) ?? 0), 0);
+  const totalCreditBalance = creditCards.reduce((sum, card) => sum + card.balance - (accountDeltasExcludingImported.get(card.id) ?? 0), 0);
   const totalLimit = creditCards.reduce((sum, card) => sum + card.limitAmount, 0);
+
+  // New metrics: savings rate
+  const savingsRatePct = income > 0 ? ((income - expenses) / income) * 100 : 0;
+
+  // New metrics: top merchant
+  const merchantTotals = new Map<string, number>();
+  postedCashflowTransactions.filter((tx) => tx.type === "expense").forEach((tx) => {
+    merchantTotals.set(tx.merchant, (merchantTotals.get(tx.merchant) ?? 0) + tx.amount);
+  });
+  let topMerchant: { name: string; total: number } | null = null;
+  merchantTotals.forEach((total, name) => {
+    if (!topMerchant || total > topMerchant.total) topMerchant = { name, total };
+  });
+
+  // New metrics: biggest expense category
+  const catTotals = new Map<string, number>();
+  postedCashflowTransactions.filter((tx) => tx.type === "expense").forEach((tx) => {
+    catTotals.set(tx.category, (catTotals.get(tx.category) ?? 0) + tx.amount);
+  });
+  let biggestExpenseCategory: { name: string; total: number } | null = null;
+  catTotals.forEach((total, name) => {
+    if (!biggestExpenseCategory || total > biggestExpenseCategory.total) biggestExpenseCategory = { name, total };
+  });
+
+  // New metrics: next bill due
+  const today = localIsoDate();
+  const activeUpcoming = subscriptions
+    .filter((s) => s.isActive && s.nextDueDate >= today)
+    .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
+  const nextBill = activeUpcoming[0] ?? null;
+  const daysUntilNextBill = nextBill
+    ? Math.ceil((new Date(`${nextBill.nextDueDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) / 86400000)
+    : null;
+
   return {
     income,
     expenses,
     netCashflow: income - expenses,
     monthlySubscriptions: calculateMonthlySubscriptionCost(subscriptions),
     totalCreditBalance,
-    bankCashPosition: bankAccounts.reduce((sum, account) => sum + account.currentBalance + (accountDeltasExcludingImported.get(account.id) ?? 0), 0),
+    bankCashPosition: bankAccounts.reduce((sum, account) => {
+      // SimpleFin bank balances already reflect all activity — don't add deltas
+      if (account.id.startsWith("bank-feed:")) return sum + account.currentBalance;
+      return sum + account.currentBalance + (accountDeltasExcludingImported.get(account.id) ?? 0);
+    }, 0),
     averageUtilizationPct: totalLimit > 0 ? (totalCreditBalance / totalLimit) * 100 : 0,
     retirementBalance,
-    retirementProjected12m: calculateRetirementProjection(retirementEntries)
+    retirementProjected12m: calculateRetirementProjection(retirementEntries),
+    savingsRatePct,
+    topMerchant,
+    biggestExpenseCategory,
+    daysUntilNextBill,
+    nextBillName: nextBill?.name ?? null,
+    nextBillAmount: nextBill?.cost ?? null
   };
 }
 
@@ -489,6 +545,315 @@ export function netWorthSeries(
   });
 
   return result;
+}
+
+// --- Budget Statuses ---
+
+export function calculateBudgetStatuses(
+  budgets: Budget[],
+  transactions: Transaction[],
+  asOf = localIsoDate()
+): BudgetStatus[] {
+  const today = new Date(`${asOf}T00:00:00`);
+  return budgets
+    .filter((b) => b.isActive)
+    .map((budget) => {
+      let periodStart: Date;
+      let periodEnd: Date;
+      let periodDays: number;
+
+      if (budget.period === "weekly") {
+        const dayOfWeek = today.getDay();
+        periodStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek);
+        periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth(), periodStart.getDate() + 7);
+        periodDays = 7;
+      } else if (budget.period === "yearly") {
+        periodStart = new Date(today.getFullYear(), 0, 1);
+        periodEnd = new Date(today.getFullYear() + 1, 0, 1);
+        periodDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / 86400000);
+      } else {
+        // monthly (default)
+        periodStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        periodDays = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / 86400000);
+      }
+
+      const periodStartIso = localIsoDate(periodStart);
+      const periodEndIso = localIsoDate(periodEnd);
+
+      const spent = transactions
+        .filter(
+          (tx) =>
+            tx.type === "expense" &&
+            tx.category === budget.category &&
+            tx.date >= periodStartIso &&
+            tx.date < periodEndIso
+        )
+        .reduce((sum, tx) => sum + tx.amount, 0);
+
+      const remaining = Math.max(0, budget.amount - spent);
+      const pctUsed = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
+      const elapsed = Math.ceil((today.getTime() - periodStart.getTime()) / 86400000);
+      const pctElapsed = periodDays > 0 ? elapsed / periodDays : 1;
+      const onTrack = pctUsed <= pctElapsed * 100;
+
+      return { budget, spent, remaining, pctUsed, onTrack };
+    });
+}
+
+// --- Spending Insights ---
+
+export function generateSpendingInsights(
+  transactions: Transaction[],
+  budgets: Budget[],
+  subscriptions: Subscription[],
+  asOf = localIsoDate()
+): SpendingInsight[] {
+  const insights: SpendingInsight[] = [];
+  const today = new Date(`${asOf}T00:00:00`);
+  const currentMonth = asOf.slice(0, 7);
+
+  // 1. Overspend alerts from budgets
+  const statuses = calculateBudgetStatuses(budgets, transactions, asOf);
+  statuses.forEach((s) => {
+    if (s.pctUsed >= 100) {
+      insights.push({
+        type: "overspend",
+        title: `Over budget: ${s.budget.category}`,
+        description: `You've spent $${s.spent.toFixed(0)} of your $${s.budget.amount.toFixed(0)} ${s.budget.category} budget.`,
+        severity: "warning",
+        category: s.budget.category,
+        amount: s.spent - s.budget.amount
+      });
+    } else if (s.pctUsed >= 90) {
+      insights.push({
+        type: "overspend",
+        title: `Almost at limit: ${s.budget.category}`,
+        description: `${s.pctUsed.toFixed(0)}% of your ${s.budget.category} budget used. $${s.remaining.toFixed(0)} remaining.`,
+        severity: "warning",
+        category: s.budget.category,
+        amount: s.remaining
+      });
+    }
+  });
+
+  // 2. Anomaly detection via rolling averages
+  const rollingAvg = categoryRollingAverage(transactions, currentMonth, 3);
+  const currentSpend = new Map<string, number>();
+  transactions
+    .filter((tx) => tx.type === "expense" && tx.date.slice(0, 7) === currentMonth)
+    .forEach((tx) => currentSpend.set(tx.category, (currentSpend.get(tx.category) ?? 0) + tx.amount));
+
+  currentSpend.forEach((amount, category) => {
+    const avg = rollingAvg.get(category) ?? 0;
+    if (avg > 0 && amount > avg * 1.5) {
+      insights.push({
+        type: "anomaly",
+        title: `Unusual spending: ${category}`,
+        description: `$${amount.toFixed(0)} this month vs $${avg.toFixed(0)} average. That's ${((amount / avg) * 100 - 100).toFixed(0)}% higher.`,
+        severity: "warning",
+        category,
+        amount
+      });
+    }
+  });
+
+  // 3. Savings streak
+  const monthlyData = monthlySpendingTrend(transactions, 6);
+  let streak = 0;
+  for (let i = monthlyData.length - 1; i >= 0; i--) {
+    if (monthlyData[i].savings > 0) streak++;
+    else break;
+  }
+  if (streak >= 3) {
+    insights.push({
+      type: "streak",
+      title: `${streak}-month savings streak!`,
+      description: `You've saved money for ${streak} consecutive months. Keep it up!`,
+      severity: "success"
+    });
+  }
+
+  // 4. Savings opportunity: high-spend recurring merchants
+  const merchantMonth = new Map<string, Set<string>>();
+  transactions
+    .filter((tx) => tx.type === "expense")
+    .forEach((tx) => {
+      const month = tx.date.slice(0, 7);
+      const set = merchantMonth.get(tx.merchant) ?? new Set();
+      set.add(month);
+      merchantMonth.set(tx.merchant, set);
+    });
+  merchantMonth.forEach((months, merchant) => {
+    if (months.size >= 3) {
+      const total = transactions
+        .filter((tx) => tx.type === "expense" && tx.merchant === merchant)
+        .reduce((s, tx) => s + tx.amount, 0);
+      if (total > 500) {
+        insights.push({
+          type: "savings-opportunity",
+          title: `Review: ${merchant}`,
+          description: `You've spent $${total.toFixed(0)} at ${merchant} across ${months.size} months.`,
+          severity: "info",
+          amount: total
+        });
+      }
+    }
+  });
+
+  // 5. Tips when sparse data
+  if (transactions.length === 0) {
+    insights.push({
+      type: "tip",
+      title: "Get started",
+      description: "Add transactions or connect SimpleFin to get personalized spending insights.",
+      severity: "info"
+    });
+  }
+  if (budgets.length === 0 && transactions.length > 0) {
+    insights.push({
+      type: "tip",
+      title: "Set up budgets",
+      description: "Create budgets to track spending limits by category.",
+      severity: "info"
+    });
+  }
+
+  return insights;
+}
+
+// --- Monthly Spending Trend ---
+
+export function monthlySpendingTrend(transactions: Transaction[], months = 12): MonthlyTrend[] {
+  const now = new Date();
+  const result: MonthlyTrend[] = [];
+
+  for (let i = months - 1; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    let income = 0;
+    let expense = 0;
+    transactions.forEach((tx) => {
+      if (tx.date.slice(0, 7) !== month) return;
+      if (tx.type === "income") income += tx.amount;
+      if (tx.type === "expense") expense += tx.amount;
+    });
+    const savings = income - expense;
+    const savingsRate = income > 0 ? (savings / income) * 100 : 0;
+    result.push({ month, income, expense, savings, savingsRate });
+  }
+  return result;
+}
+
+// --- Spending Forecast ---
+
+export function spendingForecast(
+  trends: MonthlyTrend[]
+): { nextMonthExpense: number; nextMonthIncome: number; confidence: "low" | "medium" | "high" } {
+  if (trends.length < 2) {
+    return { nextMonthExpense: 0, nextMonthIncome: 0, confidence: "low" };
+  }
+
+  const recent = trends.slice(-3);
+  const avgExpense = recent.reduce((s, t) => s + t.expense, 0) / recent.length;
+  const avgIncome = recent.reduce((s, t) => s + t.income, 0) / recent.length;
+
+  // Variance for confidence
+  const variance = recent.reduce((s, t) => s + Math.pow(t.expense - avgExpense, 2), 0) / recent.length;
+  const cv = avgExpense > 0 ? Math.sqrt(variance) / avgExpense : 1;
+  const confidence = cv < 0.15 ? "high" : cv < 0.35 ? "medium" : "low";
+
+  return { nextMonthExpense: avgExpense, nextMonthIncome: avgIncome, confidence };
+}
+
+// --- Goal Progress ---
+
+export function calculateGoalProgress(
+  goals: Goal[],
+  banks: BankAccount[],
+  cards: CreditCard[]
+): GoalProgress[] {
+  const today = new Date();
+
+  return goals
+    .filter((g) => g.isActive)
+    .map((goal) => {
+      let currentAmount = goal.currentAmount;
+
+      // For debt-payoff, try to use linked card balance
+      if (goal.type === "debt-payoff" && goal.linkedAccountId) {
+        const card = cards.find((c) => c.id === goal.linkedAccountId);
+        if (card) {
+          // Progress = how much debt has been paid off
+          currentAmount = Math.max(0, goal.targetAmount - card.balance);
+        }
+      }
+
+      // For savings goals linked to a bank account
+      if (goal.type === "savings" && goal.linkedAccountId) {
+        const bank = banks.find((b) => b.id === goal.linkedAccountId);
+        if (bank) {
+          currentAmount = bank.currentBalance;
+        }
+      }
+
+      const pctComplete = goal.targetAmount > 0 ? Math.min(100, (currentAmount / goal.targetAmount) * 100) : 0;
+
+      const deadlineDate = new Date(`${goal.deadline}T00:00:00`);
+      const monthsRemaining = Math.max(
+        0,
+        (deadlineDate.getFullYear() - today.getFullYear()) * 12 + (deadlineDate.getMonth() - today.getMonth())
+      );
+      const remaining = Math.max(0, goal.targetAmount - currentAmount);
+      const monthlyNeeded = monthsRemaining > 0 ? remaining / monthsRemaining : remaining;
+
+      // Project completion date based on recent progress rate
+      let projectedDate: string | null = null;
+      if (currentAmount > 0 && remaining > 0) {
+        // Estimate months since start
+        const startDate = new Date(`${goal.deadline}T00:00:00`);
+        startDate.setMonth(startDate.getMonth() - 12); // assume ~12 month horizon
+        const monthsElapsed = Math.max(1, (today.getFullYear() - startDate.getFullYear()) * 12 + (today.getMonth() - startDate.getMonth()));
+        const monthlyRate = currentAmount / monthsElapsed;
+        if (monthlyRate > 0) {
+          const monthsToGo = remaining / monthlyRate;
+          const projected = new Date(today.getFullYear(), today.getMonth() + Math.ceil(monthsToGo), 1);
+          projectedDate = localIsoDate(projected);
+        }
+      } else if (remaining <= 0) {
+        projectedDate = localIsoDate(today);
+      }
+
+      const onTrack = monthsRemaining > 0 ? monthlyNeeded <= (currentAmount / Math.max(1, 12 - monthsRemaining)) * 1.1 : remaining <= 0;
+
+      return { goal: { ...goal, currentAmount }, pctComplete, monthlyNeeded, onTrack, projectedDate };
+    });
+}
+
+// --- Debt Payoff Timeline (enhanced) ---
+
+export function debtPayoffTimeline(
+  cards: CreditCard[],
+  months = 36
+): Array<{ month: number; totalDebt: number; interestPaid: number }> {
+  let totalDebt = cards.reduce((sum, card) => sum + card.balance, 0);
+  const weightedApr = cards.length
+    ? cards.reduce((sum, card) => sum + card.apr * (card.balance || 1), 0) / cards.reduce((sum, card) => sum + (card.balance || 1), 0)
+    : 0;
+  const monthlyRate = weightedApr / 100 / 12;
+  const paymentFloor = cards.reduce((sum, card) => sum + card.minPayment, 0);
+
+  const out: Array<{ month: number; totalDebt: number; interestPaid: number }> = [];
+  let cumulativeInterest = 0;
+
+  for (let i = 0; i <= months; i++) {
+    out.push({ month: i, totalDebt: Math.max(totalDebt, 0), interestPaid: cumulativeInterest });
+    if (totalDebt <= 0) continue;
+    const interest = totalDebt * monthlyRate;
+    cumulativeInterest += interest;
+    totalDebt = totalDebt + interest - paymentFloor;
+  }
+  return out;
 }
 
 export function scenarioImpactTransactions(scenarios: Scenario[]) {

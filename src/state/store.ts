@@ -2,35 +2,26 @@ import { create } from "zustand";
 import { db } from "../data/db";
 import {
   byCategory,
-  cashflowTransactions,
+  calculateBudgetStatuses,
   calculateDashboardMetrics,
   calculateFinancialHealthScore,
+  calculateGoalProgress,
+  cashflowTransactions,
   cashflowSeries,
   categoryVarianceSeries,
   evaluateScenario,
+  generateSpendingInsights,
+  isAllowedImportedDate,
+  localIsoDate,
+  monthlySpendingTrend,
   netWorthSeries,
   postedTransactionsAsOf,
-  localIsoDate,
-  scenarioImpactTransactions
+  scenarioImpactTransactions,
+  spendingForecast
 } from "../domain/calculations";
-import type { CreditCard, DashboardMetrics, RetirementEntry, Scenario, Subscription, Transaction } from "../domain/models";
-import type { BankAccount, UiPreferences } from "../domain/models";
+import type { BankAccount, Budget, CreditCard, DashboardMetrics, Goal, RetirementEntry, Scenario, Subscription, Transaction, UiPreferences } from "../domain/models";
 
-type AppView = "dashboard" | "transactions" | "subscriptions" | "cards" | "banks" | "scenarios" | "retirement" | "customize";
-const IMPORT_CUTOFF_DATE = (() => {
-  const d = new Date();
-  d.setDate(d.getDate() - 90);
-  return localIsoDate(d);
-})();
-
-function isImportedTransaction(transaction: Transaction) {
-  return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");
-}
-
-function isAllowedImportedDate(transaction: Transaction) {
-  if (!isImportedTransaction(transaction)) return true;
-  return transaction.date >= IMPORT_CUTOFF_DATE;
-}
+type AppView = "dashboard" | "transactions" | "subscriptions" | "cards" | "banks" | "budgets" | "goals" | "scenarios" | "retirement" | "customize";
 
 type Store = {
   view: AppView;
@@ -40,6 +31,8 @@ type Store = {
   subscriptions: Subscription[];
   cards: CreditCard[];
   banks: BankAccount[];
+  budgets: Budget[];
+  goals: Goal[];
   scenarios: Scenario[];
   retirementEntries: RetirementEntry[];
   uiPreferences: UiPreferences;
@@ -57,6 +50,10 @@ type Store = {
   deleteScenario: (id: string) => Promise<void>;
   upsertBank: (account: BankAccount) => Promise<void>;
   deleteBank: (id: string) => Promise<void>;
+  upsertBudget: (budget: Budget) => Promise<void>;
+  deleteBudget: (id: string) => Promise<void>;
+  upsertGoal: (goal: Goal) => Promise<void>;
+  deleteGoal: (id: string) => Promise<void>;
   upsertRetirementEntry: (entry: RetirementEntry) => Promise<void>;
   deleteRetirementEntry: (id: string) => Promise<void>;
   updateUiPreferences: (prefs: Partial<UiPreferences>) => Promise<void>;
@@ -74,7 +71,13 @@ const emptyMetrics: DashboardMetrics = {
   bankCashPosition: 0,
   averageUtilizationPct: 0,
   retirementBalance: 0,
-  retirementProjected12m: 0
+  retirementProjected12m: 0,
+  savingsRatePct: 0,
+  topMerchant: null,
+  biggestExpenseCategory: null,
+  daysUntilNextBill: null,
+  nextBillName: null,
+  nextBillAmount: null
 };
 
 const defaultUiPreferences: UiPreferences = {
@@ -93,6 +96,8 @@ export const useFinanceStore = create<Store>((set, get) => ({
   subscriptions: [],
   cards: [],
   banks: [],
+  budgets: [],
+  goals: [],
   scenarios: [],
   retirementEntries: [],
   uiPreferences: defaultUiPreferences,
@@ -100,11 +105,13 @@ export const useFinanceStore = create<Store>((set, get) => ({
   setView: (view) => set({ view }),
   refreshAll: async () => {
     set({ loading: true });
-    const [rawManualTransactions, subscriptions, cards, banks, scenarios, retirementEntries, uiPreferences] = await Promise.all([
+    const [rawManualTransactions, subscriptions, cards, banks, budgets, goals, scenarios, retirementEntries, uiPreferences] = await Promise.all([
       db.listTransactions(),
       db.listSubscriptions(),
       db.listCards(),
       db.listBanks(),
+      db.listBudgets(),
+      db.listGoals(),
       db.listScenarios(),
       db.listRetirementEntries(),
       db.getUiPreferences()
@@ -134,6 +141,8 @@ export const useFinanceStore = create<Store>((set, get) => ({
       subscriptions: normalizedSubscriptions,
       cards,
       banks: normalizedBanks,
+      budgets,
+      goals,
       scenarios: normalizedScenarios,
       retirementEntries,
       uiPreferences,
@@ -184,6 +193,22 @@ export const useFinanceStore = create<Store>((set, get) => ({
     await db.deleteBank(id);
     await get().refreshAll();
   },
+  upsertBudget: async (budget) => {
+    await db.upsertBudget(budget);
+    await get().refreshAll();
+  },
+  deleteBudget: async (id) => {
+    await db.deleteBudget(id);
+    await get().refreshAll();
+  },
+  upsertGoal: async (goal) => {
+    await db.upsertGoal(goal);
+    await get().refreshAll();
+  },
+  deleteGoal: async (id) => {
+    await db.deleteGoal(id);
+    await get().refreshAll();
+  },
   upsertRetirementEntry: async (entry) => {
     await db.upsertRetirementEntry(entry);
     await get().refreshAll();
@@ -213,11 +238,16 @@ export function useDashboardData() {
   const scenarios = useFinanceStore((state) => state.scenarios);
   const cards = useFinanceStore((state) => state.cards);
   const metrics = useFinanceStore((state) => state.metrics);
+  const budgets = useFinanceStore((state) => state.budgets);
+  const goals = useFinanceStore((state) => state.goals);
+  const subscriptions = useFinanceStore((state) => state.subscriptions);
   const today = localIsoDate();
   const cashflowTransactionsAllDates = cashflowTransactions(transactions, cards);
   const postedTransactions = postedTransactionsAsOf(cashflowTransactionsAllDates, today);
   const banks = useFinanceStore((state) => state.banks);
   const retirementEntries = useFinanceStore((state) => state.retirementEntries);
+
+  const trends = monthlySpendingTrend(cashflowTransactionsAllDates, 12);
 
   return {
     categorySpend: byCategory(postedTransactions),
@@ -229,6 +259,11 @@ export function useDashboardData() {
     healthScore: calculateFinancialHealthScore(metrics),
     spendingPulse: categoryVarianceSeries(cashflowTransactionsAllDates),
     netWorth: netWorthSeries(transactions, banks, cards, retirementEntries),
+    budgetStatuses: calculateBudgetStatuses(budgets, transactions, today),
+    insights: generateSpendingInsights(cashflowTransactionsAllDates, budgets, subscriptions, today),
+    monthlyTrends: trends,
+    forecast: spendingForecast(monthlySpendingTrend(cashflowTransactionsAllDates, 6)),
+    goalProgress: calculateGoalProgress(goals, banks, cards),
   };
 }
 

@@ -46,7 +46,7 @@ export function CreditCardsView() {
   const debtSeries = creditDebtProjectionSeries(cards, 24);
   const hasDebt = cards.some((card) => card.balance > 0);
   const today = localIsoDate();
-  const postedByAccount = transactionDeltaByAccount(transactions, today);
+  const postedByAccount = transactionDeltaByAccount(transactions, today, { includeImported: false });
   const pendingByAccount = transactions
     .filter((tx) => tx.date > today)
     .reduce<Map<string, number>>((map, tx) => {
