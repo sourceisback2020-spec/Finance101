@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { fetchSimpleFinAccounts } from "./simplefin.ts";
-const IMPORT_CUTOFF_UNIX = Math.floor(new Date("2026-02-12T00:00:00Z").getTime() / 1000);
-const IMPORT_CUTOFF_DATE = "2026-02-12";
+const IMPORT_CUTOFF_UNIX = Math.floor(new Date("2026-02-16T00:00:00Z").getTime() / 1000);
+const IMPORT_CUTOFF_DATE = "2026-02-16";
 
 type SimpleFinConnectionRow = {
   owner_id: string;

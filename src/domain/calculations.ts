@@ -33,7 +33,7 @@ export function postedTransactionsAsOf(transactions: Transaction[], asOf = local
   return transactions.filter((tx) => isPostedTransaction(tx, asOf));
 }
 
-export const IMPORT_CUTOFF_DATE = "2026-02-10";
+export const IMPORT_CUTOFF_DATE = "2026-02-16";
 
 export function isImportedTransaction(transaction: Transaction) {
   return transaction.id.startsWith("bank-feed:") || transaction.note.toLowerCase().includes("imported from");

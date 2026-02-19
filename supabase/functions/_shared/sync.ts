@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { plaidRequest, type PlaidConfig } from "./plaid.ts";
-const IMPORT_CUTOFF_DATE = "2026-02-12";
+const IMPORT_CUTOFF_DATE = "2026-02-16";
 
 type ConnectionRow = {
   owner_id: string;
