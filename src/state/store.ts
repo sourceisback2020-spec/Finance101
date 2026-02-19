@@ -12,6 +12,7 @@ import {
   evaluateScenario,
   generateSpendingInsights,
   isAllowedImportedDate,
+  isImportedTransaction,
   localIsoDate,
   monthlySpendingTrend,
   netWorthSeries,
@@ -243,26 +244,30 @@ export function useDashboardData() {
   const subscriptions = useFinanceStore((state) => state.subscriptions);
   const today = localIsoDate();
   const cashflowTransactionsAllDates = cashflowTransactions(transactions, cards);
-  const postedTransactions = postedTransactionsAsOf(cashflowTransactionsAllDates, today);
+  // Exclude imported bank-feed transactions from charts/KPIs — their values
+  // are already reflected in bank currentBalance, so including them double-counts.
+  const manualCashflow = cashflowTransactionsAllDates.filter((tx) => !isImportedTransaction(tx));
+  const postedManualTransactions = postedTransactionsAsOf(manualCashflow, today);
   const banks = useFinanceStore((state) => state.banks);
   const retirementEntries = useFinanceStore((state) => state.retirementEntries);
 
-  const trends = monthlySpendingTrend(cashflowTransactionsAllDates, 12);
+  const manualTransactionsOnly = transactions.filter((tx) => !isImportedTransaction(tx));
+  const trends = monthlySpendingTrend(manualCashflow, 12);
 
   return {
-    categorySpend: byCategory(postedTransactions),
-    cashflow: cashflowSeries(cashflowTransactionsAllDates),
+    categorySpend: byCategory(postedManualTransactions),
+    cashflow: cashflowSeries(manualCashflow),
     scenarioOutcomes: scenarios.map((scenario) => ({
       name: scenario.name,
       ...evaluateScenario(scenario, metrics.netCashflow, metrics.monthlySubscriptions, cards)
     })),
     healthScore: calculateFinancialHealthScore(metrics),
-    spendingPulse: categoryVarianceSeries(cashflowTransactionsAllDates),
-    netWorth: netWorthSeries(transactions, banks, cards, retirementEntries),
-    budgetStatuses: calculateBudgetStatuses(budgets, transactions, today),
-    insights: generateSpendingInsights(cashflowTransactionsAllDates, budgets, subscriptions, today),
+    spendingPulse: categoryVarianceSeries(manualCashflow),
+    netWorth: netWorthSeries(manualTransactionsOnly, banks, cards, retirementEntries),
+    budgetStatuses: calculateBudgetStatuses(budgets, manualTransactionsOnly, today),
+    insights: generateSpendingInsights(manualCashflow, budgets, subscriptions, today),
     monthlyTrends: trends,
-    forecast: spendingForecast(monthlySpendingTrend(cashflowTransactionsAllDates, 6)),
+    forecast: spendingForecast(monthlySpendingTrend(manualCashflow, 6)),
     goalProgress: calculateGoalProgress(goals, banks, cards),
   };
 }

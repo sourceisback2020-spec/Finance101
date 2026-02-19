@@ -105,9 +105,12 @@ export function calculateDashboardMetrics(
   bankAccounts: BankAccount[]
 ): DashboardMetrics {
   const postedCashflowTransactions = postedCashflowTransactionsAsOf(transactions, creditCards);
+  // Exclude imported bank-feed transactions from KPIs — their impact is already
+  // reflected in the bank's currentBalance, so counting them would double-count.
+  const manualPostedCashflow = postedCashflowTransactions.filter((tx) => !isImportedTransaction(tx));
   const accountDeltasExcludingImported = transactionDeltaByAccount(transactions, localIsoDate(), { includeImported: false });
-  const income = postedCashflowTransactions.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
-  const expenses = postedCashflowTransactions.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
+  const income = manualPostedCashflow.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
+  const expenses = manualPostedCashflow.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
   const retirementBalance = retirementEntries[0]?.balance ?? 0;
   const totalCreditBalance = creditCards.reduce((sum, card) => sum + card.balance - (accountDeltasExcludingImported.get(card.id) ?? 0), 0);
   const totalLimit = creditCards.reduce((sum, card) => sum + card.limitAmount, 0);
@@ -115,9 +118,9 @@ export function calculateDashboardMetrics(
   // New metrics: savings rate
   const savingsRatePct = income > 0 ? ((income - expenses) / income) * 100 : 0;
 
-  // New metrics: top merchant
+  // New metrics: top merchant (manual transactions only)
   const merchantTotals = new Map<string, number>();
-  postedCashflowTransactions.filter((tx) => tx.type === "expense").forEach((tx) => {
+  manualPostedCashflow.filter((tx) => tx.type === "expense").forEach((tx) => {
     merchantTotals.set(tx.merchant, (merchantTotals.get(tx.merchant) ?? 0) + tx.amount);
   });
   let topMerchant: { name: string; total: number } | null = null;
@@ -125,9 +128,9 @@ export function calculateDashboardMetrics(
     if (!topMerchant || total > topMerchant.total) topMerchant = { name, total };
   });
 
-  // New metrics: biggest expense category
+  // New metrics: biggest expense category (manual transactions only)
   const catTotals = new Map<string, number>();
-  postedCashflowTransactions.filter((tx) => tx.type === "expense").forEach((tx) => {
+  manualPostedCashflow.filter((tx) => tx.type === "expense").forEach((tx) => {
     catTotals.set(tx.category, (catTotals.get(tx.category) ?? 0) + tx.amount);
   });
   let biggestExpenseCategory: { name: string; total: number } | null = null;
