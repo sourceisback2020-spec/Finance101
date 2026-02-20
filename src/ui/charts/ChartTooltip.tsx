@@ -5,7 +5,7 @@ export function tooltipStyle(colors: ChartColors): CSSProperties {
   return {
     background: colors.tooltipBg,
     border: `1px solid ${colors.tooltipBorder}`,
-    borderRadius: 10,
+    borderRadius: 12,
   };
 }
 
@@ -42,32 +42,61 @@ export function CustomTooltip({
 
   return (
     <div className="custom-tooltip" style={{
-      background: colors.tooltipBg,
+      background: `${colors.tooltipBg}e6`,
       border: `1px solid ${colors.tooltipBorder}`,
-      borderRadius: 10,
-      padding: "8px 12px",
-      backdropFilter: "blur(8px)",
-      boxShadow: `0 4px 20px ${colors.tooltipBg}80`,
-      minWidth: 120,
+      borderRadius: 12,
+      padding: "10px 14px",
+      backdropFilter: "blur(14px) saturate(180%)",
+      WebkitBackdropFilter: "blur(14px) saturate(180%)",
+      boxShadow: `0 4px 24px ${colors.tooltipBg}90, 0 1px 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)`,
+      minWidth: 140,
     }}>
       {displayLabel && (
-        <div style={{ fontSize: 11, color: colors.axisColor, marginBottom: 4, fontWeight: 600 }}>
+        <div style={{
+          fontSize: 11,
+          color: colors.axisColor,
+          marginBottom: 6,
+          fontWeight: 700,
+          letterSpacing: "0.03em",
+          textTransform: "uppercase",
+        }}>
           {displayLabel}
         </div>
       )}
+      {displayLabel && payload.length > 0 && (
+        <div style={{
+          height: 1,
+          background: `linear-gradient(90deg, transparent, ${colors.tooltipBorder}, transparent)`,
+          marginBottom: 6,
+        }} />
+      )}
       {payload.map((item, i) => (
-        <div key={`${item.name}-${i}`} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, lineHeight: 1.6 }}>
+        <div key={`${item.name}-${i}`} style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 13,
+          lineHeight: 1.7,
+        }}>
           <span style={{
-            width: 8,
-            height: 8,
+            width: 10,
+            height: 10,
             borderRadius: "50%",
             background: item.color ?? colors.positive,
+            border: "1.5px solid rgba(255,255,255,0.18)",
             flexShrink: 0,
           }} />
-          <span style={{ color: colors.axisColor, textTransform: "capitalize" }}>
+          <span style={{ color: colors.axisColor, textTransform: "capitalize", fontSize: 12 }}>
             {item.name ?? item.dataKey ?? ""}
           </span>
-          <span style={{ marginLeft: "auto", fontWeight: 700, color: "#fff", fontFamily: "var(--font-family-ui)" }}>
+          <span style={{
+            marginLeft: "auto",
+            fontWeight: 700,
+            color: "#fff",
+            fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+            fontSize: 13,
+            letterSpacing: "-0.02em",
+          }}>
             {valueFn(item.value ?? 0, item.name ?? "")}
           </span>
         </div>

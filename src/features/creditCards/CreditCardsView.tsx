@@ -120,8 +120,8 @@ export function CreditCardsView() {
                 <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" width={140} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip colors={colors} />} />
-                <Bar dataKey="limit" fill={`${colors.axisColor}22`} radius={[0, 8, 8, 0]} barSize={18} {...anim} />
-                <Bar dataKey="liveDebt" fill="url(#grad-bar-debt)" radius={[0, 8, 8, 0]} barSize={18} {...anim} />
+                <Bar dataKey="limit" fill={`${colors.axisColor}22`} radius={[0, 6, 6, 0]} barSize={22} {...anim} />
+                <Bar dataKey="liveDebt" fill="url(#grad-bar-debt)" radius={[0, 6, 6, 0]} barSize={22} {...anim} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -132,15 +132,15 @@ export function CreditCardsView() {
         <h3>Debt Trend Projection (Stock-Style)</h3>
         {hasDebt ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={debtSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
                 <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                 <XAxis dataKey="month" tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip colors={colors} />} />
+                <Tooltip content={<CustomTooltip colors={colors} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
                 <ReferenceLine y={0} stroke={colors.axisColor} strokeDasharray="4 4" strokeOpacity={0.5} />
-                <Area type={visuals.curveType} dataKey="debt" stroke={colors.debt} fill="url(#grad-debt)" strokeWidth={2.5} activeDot={<CustomActiveDot />} {...anim} />
+                <Area type={visuals.curveType} dataKey="debt" stroke={colors.debt} fill="url(#grad-debt)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

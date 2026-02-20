@@ -29,6 +29,8 @@ export type ChartVisuals = {
   gridStyle: "both" | "horizontal" | "none";
   curveType: "monotone" | "natural";
   dotStyle: "none" | "active" | "all";
+  strokeWidth: number;
+  barRadius: number;
 };
 
 export type ChartTheme = {
@@ -43,6 +45,8 @@ const defaultVisuals: ChartVisuals = {
   gridStyle: "both",
   curveType: "monotone",
   dotStyle: "active",
+  strokeWidth: 2.5,
+  barRadius: 6,
 };
 
 const themeMap: Record<string, ChartTheme> = {
@@ -54,8 +58,8 @@ const themeMap: Record<string, ChartTheme> = {
       tooltipBg: "#0f1d43", tooltipBorder: "#2f61c0", axisColor: "#9fb8e9",
       gridColor: "rgba(138,171,230,0.28)", brushStroke: "#2f61c0",
     },
-    animation: { enabled: false, duration: 0, easing: "ease" },
-    visuals: { ...defaultVisuals, gradientOpacity: 0.35 },
+    animation: { enabled: true, duration: 300, easing: "ease-out" },
+    visuals: { ...defaultVisuals, gradientOpacity: 0.38 },
   },
   soft: {
     colors: {
@@ -65,8 +69,8 @@ const themeMap: Record<string, ChartTheme> = {
       tooltipBg: "#0f1d43", tooltipBorder: "#2f61c0", axisColor: "#9fb8e9",
       gridColor: "rgba(138,171,230,0.28)", brushStroke: "#2f61c0",
     },
-    animation: { enabled: false, duration: 0, easing: "ease" },
-    visuals: { ...defaultVisuals, gradientOpacity: 0.3 },
+    animation: { enabled: true, duration: 350, easing: "ease-out" },
+    visuals: { ...defaultVisuals, gradientOpacity: 0.32 },
   },
   minimal: {
     colors: {
@@ -76,8 +80,8 @@ const themeMap: Record<string, ChartTheme> = {
       tooltipBg: "#0f1d43", tooltipBorder: "#2f61c0", axisColor: "#9fb8e9",
       gridColor: "rgba(138,171,230,0.28)", brushStroke: "#2f61c0",
     },
-    animation: { enabled: false, duration: 0, easing: "ease" },
-    visuals: { ...defaultVisuals, gradientOpacity: 0.2, gridStyle: "horizontal" },
+    animation: { enabled: true, duration: 250, easing: "ease" },
+    visuals: { ...defaultVisuals, gradientOpacity: 0.22, gridStyle: "horizontal", strokeWidth: 2 },
   },
   terminal: {
     colors: {
@@ -87,8 +91,8 @@ const themeMap: Record<string, ChartTheme> = {
       tooltipBg: "#0a0a0a", tooltipBorder: "#45ff9a", axisColor: "#7cfbc5",
       gridColor: "rgba(69,255,154,0.18)", brushStroke: "#45ff9a",
     },
-    animation: { enabled: false, duration: 0, easing: "ease" },
-    visuals: { ...defaultVisuals, gradientOpacity: 0.25 },
+    animation: { enabled: true, duration: 200, easing: "ease-out" },
+    visuals: { ...defaultVisuals, gradientOpacity: 0.28, glowEnabled: true },
   },
   executive: {
     colors: {
@@ -98,8 +102,8 @@ const themeMap: Record<string, ChartTheme> = {
       tooltipBg: "#161B22", tooltipBorder: "#30363D", axisColor: "#8b949e",
       gridColor: "rgba(48,54,61,0.6)", brushStroke: "#30363D",
     },
-    animation: { enabled: true, duration: 400, easing: "ease-out" },
-    visuals: { ...defaultVisuals, gradientOpacity: 0.3, gridStyle: "horizontal" },
+    animation: { enabled: true, duration: 450, easing: "ease-out" },
+    visuals: { ...defaultVisuals, gradientOpacity: 0.32, gridStyle: "horizontal" },
   },
   futurist: {
     colors: {
@@ -109,8 +113,8 @@ const themeMap: Record<string, ChartTheme> = {
       tooltipBg: "#0A1628", tooltipBorder: "#1E3A5F", axisColor: "#64748B",
       gridColor: "rgba(30,58,95,0.5)", brushStroke: "#1E3A5F",
     },
-    animation: { enabled: true, duration: 600, easing: "ease" },
-    visuals: { ...defaultVisuals, gradientOpacity: 0.45, glowEnabled: true },
+    animation: { enabled: true, duration: 650, easing: "ease" },
+    visuals: { ...defaultVisuals, gradientOpacity: 0.48, glowEnabled: true, strokeWidth: 2.5 },
   },
   journalist: {
     colors: {
@@ -121,7 +125,7 @@ const themeMap: Record<string, ChartTheme> = {
       gridColor: "rgba(45,45,53,0.4)", brushStroke: "#2D2D35",
     },
     animation: { enabled: true, duration: 800, easing: "ease-in-out" },
-    visuals: { ...defaultVisuals, gradientOpacity: 0.15, gridStyle: "horizontal", curveType: "natural" },
+    visuals: { ...defaultVisuals, gradientOpacity: 0.18, gridStyle: "horizontal", curveType: "natural", strokeWidth: 2 },
   },
 };
 

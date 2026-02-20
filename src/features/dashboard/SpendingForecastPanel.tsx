@@ -4,6 +4,7 @@ import { useChartTheme } from "../../ui/charts/chartTheme";
 import { useChartAnimation } from "../../hooks/useChartAnimation";
 import { CustomTooltip } from "../../ui/charts/ChartTooltip";
 import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
+import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
@@ -71,7 +72,7 @@ export function SpendingForecastPanel({ trends, forecast }: Props) {
         </div>
       </div>
       <div className="chart-box">
-        <ResponsiveContainer width="100%" height={180}>
+        <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
             <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} />
@@ -88,21 +89,23 @@ export function SpendingForecastPanel({ trends, forecast }: Props) {
               axisLine={false}
               tickLine={false}
             />
-            <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
+            <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
             <Area
-              type="monotone"
+              type={visuals.curveType}
               dataKey="expense"
               stroke={colors.expense}
               fill="url(#grad-expense)"
-              strokeWidth={2}
+              strokeWidth={visuals.strokeWidth}
+              activeDot={<CustomActiveDot />}
               {...anim}
             />
             <Area
-              type="monotone"
+              type={visuals.curveType}
               dataKey="savings"
               stroke={colors.income}
               fill="url(#grad-income)"
-              strokeWidth={2}
+              strokeWidth={visuals.strokeWidth}
+              activeDot={<CustomActiveDot />}
               {...anim}
             />
           </AreaChart>

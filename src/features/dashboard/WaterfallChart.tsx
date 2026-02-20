@@ -2,6 +2,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { useChartTheme } from "../../ui/charts/chartTheme";
 import { useChartAnimation } from "../../hooks/useChartAnimation";
 import { CustomTooltip } from "../../ui/charts/ChartTooltip";
+import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
 
 function money(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
@@ -21,7 +22,7 @@ type Props = {
 };
 
 export function WaterfallChart({ income, categorySpend, netCashflow }: Props) {
-  const { colors } = useChartTheme();
+  const { colors, visuals } = useChartTheme();
   const anim = useChartAnimation();
 
   if (income === 0 && categorySpend.length === 0) {
@@ -57,12 +58,13 @@ export function WaterfallChart({ income, categorySpend, netCashflow }: Props) {
     <article className="panel chart-panel">
       <div className="panel-head"><h3>Cashflow Waterfall</h3></div>
       <div className="chart-box">
-        <ResponsiveContainer width="100%" height={240}>
+        <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+            <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} />
             <XAxis
               dataKey="name"
-              tick={{ fill: colors.axisColor, fontSize: 11 }}
+              tick={{ fill: colors.axisColor, fontSize: 11, fontWeight: 600 }}
               axisLine={false}
               tickLine={false}
             />
@@ -81,7 +83,7 @@ export function WaterfallChart({ income, categorySpend, netCashflow }: Props) {
             {/* Invisible spacer bar */}
             <Bar dataKey="invisible" stackId="waterfall" fill="transparent" isAnimationActive={false} />
             {/* Visible portion */}
-            <Bar dataKey="visible" stackId="waterfall" radius={[4, 4, 0, 0]} {...anim}>
+            <Bar dataKey="visible" stackId="waterfall" radius={[6, 6, 0, 0]} {...anim}>
               {data.map((entry, index) => (
                 <Cell
                   key={`${entry.name}-${index}`}

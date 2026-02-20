@@ -29,33 +29,38 @@ export function BudgetSummaryPanel({ statuses }: { statuses: BudgetStatus[] }) {
   return (
     <article className="panel">
       <div className="panel-head"><h3>Budget Overview</h3></div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {display.map((status) => (
-          <div key={status.budget.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-              <span style={{ fontWeight: 600 }}>{status.budget.category}</span>
-              <span style={{ color: "var(--muted)" }}>
-                {money(status.spent)} / {money(status.budget.amount)}
-              </span>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {display.map((status) => {
+          const color = barColor(status.pctUsed, colors);
+          const isOver = status.pctUsed >= 100;
+          return (
+            <div key={status.budget.id}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                <span style={{ fontWeight: 600 }}>{status.budget.category}</span>
+                <span style={{ color: "var(--muted)", fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace", fontSize: 11 }}>
+                  {money(status.spent)} / {money(status.budget.amount)}
+                </span>
+              </div>
+              <div style={{ height: 10, borderRadius: 5, background: colors.gridColor, overflow: "hidden", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.2)" }}>
+                <div
+                  style={{
+                    width: `${Math.min(100, status.pctUsed)}%`,
+                    height: "100%",
+                    borderRadius: 5,
+                    background: `linear-gradient(90deg, ${color}cc, ${color})`,
+                    transition: "width 600ms ease-out",
+                    boxShadow: isOver ? `0 0 10px ${color}50` : "none",
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: isOver ? colors.negative : "var(--muted)", marginTop: 3, fontWeight: isOver ? 600 : 400 }}>
+                {isOver
+                  ? `Over by ${money(status.spent - status.budget.amount)}`
+                  : `${money(status.remaining)} remaining`}
+              </div>
             </div>
-            <div style={{ height: 8, borderRadius: 4, background: colors.gridColor, overflow: "hidden" }}>
-              <div
-                style={{
-                  width: `${Math.min(100, status.pctUsed)}%`,
-                  height: "100%",
-                  borderRadius: 4,
-                  background: barColor(status.pctUsed, colors),
-                  transition: "width 400ms ease",
-                }}
-              />
-            </div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
-              {status.pctUsed >= 100
-                ? `Over by ${money(status.spent - status.budget.amount)}`
-                : `${money(status.remaining)} remaining`}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </article>
   );

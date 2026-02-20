@@ -72,20 +72,21 @@ export function SpendingPulseChart({ data }: { data: CategoryVariance[] }) {
                 return `${money(v)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)`;
               }} />}
             />
-            <Bar dataKey="change" radius={[0, 4, 4, 0]} barSize={18} {...anim}>
+            <Bar dataKey="change" radius={[0, 6, 6, 0]} barSize={22} {...anim}>
               {chartData.map((entry, index) => (
                 <Cell
                   key={`${entry.category}-${index}`}
                   fill={entry.change > 0 ? "url(#grad-bar-negative)" : "url(#grad-bar-positive)"}
                   stroke={entry.anomaly ? "#ffcf6a" : "none"}
                   strokeWidth={entry.anomaly ? 2 : 0}
+                  strokeDasharray={entry.anomaly ? "4 2" : undefined}
                 />
               ))}
               <LabelList
                 dataKey="changePct"
                 position="right"
                 formatter={(v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%`}
-                style={{ fill: colors.axisColor, fontSize: 11, fontWeight: 600 }}
+                style={{ fill: colors.axisColor, fontSize: 12, fontWeight: 700, fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace" }}
               />
             </Bar>
           </BarChart>

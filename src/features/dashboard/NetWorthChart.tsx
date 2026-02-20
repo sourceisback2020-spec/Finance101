@@ -73,7 +73,7 @@ export function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
         </div>
       </div>
       <div className="chart-box">
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={240}>
           <AreaChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
             <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
@@ -91,14 +91,15 @@ export function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
               axisLine={false}
               tickLine={false}
             />
-            <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
+            <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
             {data.some((d) => d.net < 0) && <ReferenceLine y={0} stroke={colors.axisColor} strokeDasharray="4 4" strokeOpacity={0.5} />}
             <Area
               type={visuals.curveType}
               dataKey="assets"
               stroke={colors.income}
               fill="url(#grad-income)"
-              strokeWidth={1.5}
+              strokeWidth={visuals.strokeWidth}
+              filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined}
               activeDot={<CustomActiveDot />}
               {...anim}
             />
@@ -109,6 +110,7 @@ export function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
               fill="url(#grad-negative)"
               strokeWidth={1.5}
               strokeDasharray="6 3"
+              strokeOpacity={0.7}
               activeDot={<CustomActiveDot />}
               {...anim}
             />
@@ -117,7 +119,8 @@ export function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
               dataKey="net"
               stroke={colors.positive}
               fill="url(#grad-positive)"
-              strokeWidth={2.5}
+              strokeWidth={3}
+              filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined}
               activeDot={<CustomActiveDot />}
               {...anim}
             />

@@ -379,8 +379,8 @@ export function BanksView() {
                 <XAxis type="number" tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" width={140} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip colors={colors} />} />
-                <Bar dataKey="live" fill="url(#grad-bar-balance)" radius={[0, 8, 8, 0]} barSize={18} {...anim}>
-                  <LabelList dataKey="live" position="right" formatter={(v: number) => money(v)} style={{ fill: colors.axisColor, fontSize: 11 }} />
+                <Bar dataKey="live" fill="url(#grad-bar-balance)" radius={[0, 6, 6, 0]} barSize={22} {...anim}>
+                  <LabelList dataKey="live" position="right" formatter={(v: number) => money(v)} style={{ fill: colors.axisColor, fontSize: 11, fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace", fontWeight: 600 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -392,14 +392,14 @@ export function BanksView() {
         <h3>Liquidity Timeline</h3>
         {hasTimeline ? (
           <div className="chart-box">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={balanceSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
                 <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                 <XAxis dataKey="date" tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip colors={colors} />} />
-                <Area type={visuals.curveType} dataKey="total" stroke={colors.subscription} fill="url(#grad-subscription)" strokeWidth={2.5} activeDot={<CustomActiveDot />} {...anim} />
+                <Tooltip content={<CustomTooltip colors={colors} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
+                <Area type={visuals.curveType} dataKey="total" stroke={colors.subscription} fill="url(#grad-subscription)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

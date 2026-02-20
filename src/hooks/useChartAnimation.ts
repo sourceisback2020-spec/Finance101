@@ -12,6 +12,11 @@ export function useChartAnimation() {
   return {
     isAnimationActive: enabled,
     animationDuration: enabled ? animation.duration : 0,
-    animationEasing: animation.easing as "ease" | "ease-in" | "ease-out" | "ease-in-out" | "linear",
+    animationEasing: (enabled ? "ease-out" : "ease") as "ease" | "ease-in" | "ease-out" | "ease-in-out" | "linear",
   };
+}
+
+/** Returns a stagger offset in ms for sequential series animation */
+export function staggerDelay(seriesIndex: number) {
+  return seriesIndex * 120;
 }

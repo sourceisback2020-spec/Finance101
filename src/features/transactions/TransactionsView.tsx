@@ -577,29 +577,30 @@ export function TransactionsView() {
           <div className="chart-panel">
             {canRenderPrimaryChart ? (
               <div className="chart-box">
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={260}>
                   {primaryChartMode === "area" ? (
                     <AreaChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
                       <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                       <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
                       <Legend />
-                      {showIncome && <Area type={visuals.curveType} dataKey="income" stroke={colors.income} fill="url(#grad-income)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                      {showExpense && <Area type={visuals.curveType} dataKey="expense" stroke={colors.expense} fill="url(#grad-expense)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                      {showNet && <Area type={visuals.curveType} dataKey="net" stroke={colors.net} fill="url(#grad-net)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showIncome && <Area type={visuals.curveType} dataKey="income" stroke={colors.income} fill="url(#grad-income)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showExpense && <Area type={visuals.curveType} dataKey="expense" stroke={colors.expense} fill="url(#grad-expense)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showNet && <Area type={visuals.curveType} dataKey="net" stroke={colors.net} fill="url(#grad-net)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
                     </AreaChart>
                   ) : primaryChartMode === "line" ? (
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                      <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
                       <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                       <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
                       <Legend />
-                      {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                      {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                      {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
                     </LineChart>
                   ) : hasCashflowCandles ? (
                     <ComposedChart data={cashflowCandleSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -659,14 +660,15 @@ export function TransactionsView() {
                     </ComposedChart>
                   ) : (
                     <LineChart data={filteredMonthlySeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                      <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
                       <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                       <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
                       <Legend />
-                      {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                      {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                      {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                      {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
                     </LineChart>
                   )}
                 </ResponsiveContainer>
@@ -680,7 +682,7 @@ export function TransactionsView() {
           <div className="chart-panel">
             {canRenderBalanceChart ? (
               <div className="chart-box">
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={260}>
                   {primaryChartMode === "candles" ? (
                     <ComposedChart data={balanceCandleSeries} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
@@ -750,8 +752,8 @@ export function TransactionsView() {
                         tickLine={false}
                       />
                       <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatDateLabel(String(l), chartRange)} />} />
-                      <Area type={visuals.curveType} dataKey="balance" stroke={colors.balance} fill="url(#grad-balance)" strokeWidth={2.5} activeDot={<CustomActiveDot />} {...anim} />
+                      <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatDateLabel(String(l), chartRange)} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
+                      <Area type={visuals.curveType} dataKey="balance" stroke={colors.balance} fill="url(#grad-balance)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />
                       <ReferenceLine x={today} stroke={colors.net} strokeWidth={2} strokeDasharray="4 4" label={{ value: "Today", position: "top", fill: colors.axisColor, fontSize: 11 }} />
                       {displayBalanceSeries.length > 18 ? <Brush dataKey="date" height={18} stroke={colors.brushStroke} travellerWidth={8} /> : null}
                     </AreaChart>

@@ -56,7 +56,7 @@ function formatMonthLabel(month: string) {
   return `${monthNumber}/${year.slice(-2)}`;
 }
 
-// Custom treemap content renderer
+// Custom treemap content renderer with depth shadow and larger font
 function TreemapContent(props: {
   x?: number; y?: number; width?: number; height?: number;
   name?: string; amount?: number; fill?: string;
@@ -65,11 +65,16 @@ function TreemapContent(props: {
   if (width < 40 || height < 30) return null;
   return (
     <g>
-      <rect x={x} y={y} width={width} height={height} rx={4} fill={fill} stroke="rgba(5,10,26,0.85)" strokeWidth={2} />
-      <text x={x + width / 2} y={y + height / 2 - 6} textAnchor="middle" fill="#fff" fontSize={11} fontWeight={600}>
+      {/* Depth shadow underneath */}
+      <rect x={x + 1} y={y + 2} width={width} height={height} rx={8} fill="rgba(0,0,0,0.25)" />
+      {/* Main rect with larger corner radius */}
+      <rect x={x} y={y} width={width} height={height} rx={8} fill={fill} stroke="rgba(5,10,26,0.85)" strokeWidth={2} style={{ transition: "opacity 200ms ease" }} />
+      {/* Subtle inner highlight for 3D feel */}
+      <rect x={x + 1} y={y + 1} width={Math.max(0, width - 2)} height={Math.max(0, height / 2)} rx={7} fill="rgba(255,255,255,0.06)" />
+      <text x={x + width / 2} y={y + height / 2 - 7} textAnchor="middle" fill="#fff" fontSize={12} fontWeight={700}>
         {name}
       </text>
-      <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize={10}>
+      <text x={x + width / 2} y={y + height / 2 + 11} textAnchor="middle" fill="rgba(255,255,255,0.75)" fontSize={11} fontWeight={500} fontFamily="'JetBrains Mono', 'Fira Code', Consolas, monospace">
         {moneyShort(amount ?? 0)}
       </text>
     </g>
@@ -180,30 +185,31 @@ export function DashboardView() {
             <div className="chart-empty">Add transactions across multiple months to view trend lines.</div>
           ) : (
             <div className="chart-box">
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer width="100%" height={260}>
                 {areaMode ? (
                   <AreaChart data={chartData}>
                     <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
                     <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                     <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
+                    <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
                     <Legend />
-                    {showIncome && <Area type={visuals.curveType} dataKey="income" stroke={colors.income} fill="url(#grad-income)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                    {showExpense && <Area type={visuals.curveType} dataKey="expense" stroke={colors.expense} fill="url(#grad-expense)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                    {showNet && <Area type={visuals.curveType} dataKey="net" stroke={colors.net} fill="url(#grad-net)" strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                    {showIncome && <Area type={visuals.curveType} dataKey="income" stroke={colors.income} fill="url(#grad-income)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                    {showExpense && <Area type={visuals.curveType} dataKey="expense" stroke={colors.expense} fill="url(#grad-expense)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                    {showNet && <Area type={visuals.curveType} dataKey="net" stroke={colors.net} fill="url(#grad-net)" strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
                     {chartData.length > 18 ? <Brush dataKey="month" height={18} stroke={colors.brushStroke} travellerWidth={8} /> : null}
                   </AreaChart>
                 ) : (
                   <LineChart data={chartData}>
+                    <ChartGradientDefs colors={colors} opacity={visuals.gradientOpacity} />
                     <CartesianGrid strokeDasharray="3 3" stroke={colors.gridColor} vertical={visuals.gridStyle === "both"} />
                     <XAxis dataKey="month" tickFormatter={formatMonthLabel} minTickGap={20} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={(value: number) => money(value)} tick={{ fill: colors.axisColor, fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} />
+                    <Tooltip content={<CustomTooltip colors={colors} formatLabel={(l) => formatMonthLabel(String(l))} />} cursor={{ stroke: colors.brushStroke, strokeDasharray: "4 4", strokeWidth: 1 }} />
                     <Legend />
-                    {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                    {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
-                    {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={2} activeDot={<CustomActiveDot />} {...anim} />}
+                    {showIncome && <Line type={visuals.curveType} dataKey="income" stroke={colors.income} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                    {showExpense && <Line type={visuals.curveType} dataKey="expense" stroke={colors.expense} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
+                    {showNet && <Line type={visuals.curveType} dataKey="net" stroke={colors.net} dot={false} strokeWidth={visuals.strokeWidth} filter={visuals.glowEnabled ? "url(#chart-glow)" : undefined} activeDot={<CustomActiveDot />} {...anim} />}
                     {chartData.length > 18 ? <Brush dataKey="month" height={18} stroke={colors.brushStroke} travellerWidth={8} /> : null}
                   </LineChart>
                 )}
@@ -223,7 +229,7 @@ export function DashboardView() {
           {categorySpend.length === 0 ? (
             <div className="chart-empty">No expense categories yet. Add expense transactions to populate this chart.</div>
           ) : categoryChartMode === "treemap" ? (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={260}>
               <Treemap
                 data={treemapData}
                 dataKey="amount"
@@ -233,7 +239,7 @@ export function DashboardView() {
               />
             </ResponsiveContainer>
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
                   data={categorySpend}
@@ -241,9 +247,10 @@ export function DashboardView() {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  innerRadius={52}
-                  outerRadius={88}
-                  paddingAngle={2}
+                  innerRadius={56}
+                  outerRadius={96}
+                  cornerRadius={4}
+                  paddingAngle={3}
                   stroke="rgba(5,10,26,0.85)"
                   strokeWidth={2}
                   label={({ name, percent }) => percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ""}
@@ -256,7 +263,7 @@ export function DashboardView() {
                   <Label
                     value={money(categorySpend.reduce((s, e) => s + e.amount, 0))}
                     position="center"
-                    style={{ fontSize: 14, fontWeight: 700, fill: "#fff" }}
+                    style={{ fontSize: 16, fontWeight: 800, fill: "#fff", fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace" }}
                   />
                 </Pie>
                 <Tooltip content={<CustomTooltip colors={colors} />} />
