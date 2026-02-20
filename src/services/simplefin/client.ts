@@ -214,15 +214,15 @@ export async function connectSimpleFinLocal(setupToken: string): Promise<{
 
   const connectionId = `simplefin:${crypto.randomUUID()}`;
 
+  // New accounts get currentBalance: 0 — the user sets the initial balance
+  // manually. SimpleFin transactions will adjust the balance from there.
   const banks: BankAccount[] = accountSet.accounts.map((account) => ({
     id: `bank-feed:${connectionId}:${account.id}`,
     institution: institutionName,
     nickname: account.name,
     type: "checking" as const,
-    currentBalance: Number(account.balance || "0"),
-    availableBalance: Number(
-      account["available-balance"] || account.balance || "0"
-    ),
+    currentBalance: 0,
+    availableBalance: 0,
     apy: 0,
     lastUpdated: new Date(
       (account["balance-date"] || Math.floor(Date.now() / 1000)) * 1000
@@ -278,16 +278,17 @@ export async function syncSimpleFinLocal(): Promise<{
     startDate
   );
 
-  // Build bank account records.
+  // Build bank account records — balance fields are set to 0 because we never
+  // overwrite the user's manually-set initial balance from SimpleFin. The db
+  // layer will only insert NEW accounts and skip existing ones to preserve
+  // the user-set currentBalance.
   const banks: BankAccount[] = accountSet.accounts.map((account) => ({
     id: `bank-feed:${connection.connectionId}:${account.id}`,
     institution: connection.institutionName,
     nickname: account.name,
     type: "checking" as const,
-    currentBalance: Number(account.balance || "0"),
-    availableBalance: Number(
-      account["available-balance"] || account.balance || "0"
-    ),
+    currentBalance: 0,
+    availableBalance: 0,
     apy: 0,
     lastUpdated: new Date(
       (account["balance-date"] || Math.floor(Date.now() / 1000)) * 1000

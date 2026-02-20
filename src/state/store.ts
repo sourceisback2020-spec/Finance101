@@ -252,6 +252,10 @@ export function useDashboardData() {
   const retirementEntries = useFinanceStore((state) => state.retirementEntries);
 
   const manualTransactionsOnly = transactions.filter((tx) => !isImportedTransaction(tx));
+  // For net worth, include ALL transactions (imported + manual) so bank-feed
+  // account balances properly reflect imported transaction deltas on top of
+  // the user-set initial balance.
+  const allTransactionsForNetWorth = transactions;
   const trends = monthlySpendingTrend(manualCashflow, 12);
 
   return {
@@ -263,7 +267,7 @@ export function useDashboardData() {
     })),
     healthScore: calculateFinancialHealthScore(metrics),
     spendingPulse: categoryVarianceSeries(manualCashflow),
-    netWorth: netWorthSeries(manualTransactionsOnly, banks, cards, retirementEntries),
+    netWorth: netWorthSeries(allTransactionsForNetWorth, banks, cards, retirementEntries),
     budgetStatuses: calculateBudgetStatuses(budgets, manualTransactionsOnly, today),
     insights: generateSpendingInsights(manualCashflow, budgets, subscriptions, today),
     monthlyTrends: trends,

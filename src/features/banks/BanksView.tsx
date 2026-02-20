@@ -46,7 +46,6 @@ export function BanksView() {
   const banks = useFinanceStore((state) => state.banks);
   const transactions = useFinanceStore((state) => state.transactions);
   const upsertBank = useFinanceStore((state) => state.upsertBank);
-  const upsertTransaction = useFinanceStore((state) => state.upsertTransaction);
   const deleteBank = useFinanceStore((state) => state.deleteBank);
   const refreshAll = useFinanceStore((state) => state.refreshAll);
   const [form, setForm] = useState<BankAccount>(initialState);
@@ -69,7 +68,7 @@ export function BanksView() {
   const isEditing = Boolean(form.id);
   const today = localIsoDate();
   const postedByAccount = useMemo(
-    () => transactionDeltaByAccount(transactions, today, { includeImported: false }),
+    () => transactionDeltaByAccount(transactions, today, { includeImported: true }),
     [transactions, today]
   );
   const balanceSeries = useMemo(
@@ -117,16 +116,11 @@ export function BanksView() {
     const normalizedAmount = Math.max(0, quickAmount);
     if (normalizedAmount <= 0) return;
 
-    await upsertTransaction({
-      id: crypto.randomUUID(),
-      date: localIsoDate(),
-      amount: normalizedAmount,
-      type: quickMode === "add" ? "income" : "expense",
-      category: "Bank Adjustment",
-      merchant: "Bank Adjustment",
-      account: bank.id,
-      note: `${quickMode === "add" ? "Added to" : "Subtracted from"} ${bank.institution} - ${bank.nickname}`,
-      recurring: 0
+    const delta = quickMode === "add" ? normalizedAmount : -normalizedAmount;
+    await upsertBank({
+      ...bank,
+      currentBalance: bank.currentBalance + delta,
+      lastUpdated: localIsoDate()
     });
     setQuickAmount(0);
   }

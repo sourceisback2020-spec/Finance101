@@ -109,6 +109,7 @@ export function calculateDashboardMetrics(
   // reflected in the bank's currentBalance, so counting them would double-count.
   const manualPostedCashflow = postedCashflowTransactions.filter((tx) => !isImportedTransaction(tx));
   const accountDeltasExcludingImported = transactionDeltaByAccount(transactions, localIsoDate(), { includeImported: false });
+  const accountDeltasAll = transactionDeltaByAccount(transactions, localIsoDate(), { includeImported: true });
   const income = manualPostedCashflow.filter((tx) => tx.type === "income").reduce((sum, tx) => sum + tx.amount, 0);
   const expenses = manualPostedCashflow.filter((tx) => tx.type === "expense").reduce((sum, tx) => sum + tx.amount, 0);
   const retirementBalance = retirementEntries[0]?.balance ?? 0;
@@ -155,8 +156,10 @@ export function calculateDashboardMetrics(
     monthlySubscriptions: calculateMonthlySubscriptionCost(subscriptions),
     totalCreditBalance,
     bankCashPosition: bankAccounts.reduce((sum, account) => {
-      // SimpleFin bank balances already reflect all activity — don't add deltas
-      if (account.id.startsWith("bank-feed:")) return sum + account.currentBalance;
+      // For bank-feed accounts: currentBalance is the user-set initial balance,
+      // so we include ALL transaction deltas (including imported from SimpleFin).
+      if (account.id.startsWith("bank-feed:")) return sum + account.currentBalance + (accountDeltasAll.get(account.id) ?? 0);
+      // For manual accounts: only include manual transaction deltas.
       return sum + account.currentBalance + (accountDeltasExcludingImported.get(account.id) ?? 0);
     }, 0),
     averageUtilizationPct: totalLimit > 0 ? (totalCreditBalance / totalLimit) * 100 : 0,

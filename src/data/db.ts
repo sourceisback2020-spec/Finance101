@@ -676,10 +676,14 @@ export const db = {
     // Local mode: client-side SimpleFin via dev proxy
     const { connectSimpleFinLocal } = await import("../services/simplefin/client");
     const result = await connectSimpleFinLocal(setupToken);
-    // Persist bank accounts through the local data layer
+    // Only add NEW bank accounts — never overwrite existing ones so the
+    // user's manually-set initial balance is preserved.
     let bankList = readList<BankAccount>("finance:banks");
     for (const bank of result.banks) {
-      bankList = upsertById(bankList, bank);
+      const exists = bankList.some((existing) => existing.id === bank.id);
+      if (!exists) {
+        bankList = [...bankList, bank];
+      }
     }
     writeList("finance:banks", bankList);
     return {
@@ -697,10 +701,14 @@ export const db = {
     const { syncSimpleFinLocal } = await import("../services/simplefin/client");
     const result = await syncSimpleFinLocal();
 
-    // Persist bank accounts
+    // Only add NEW bank accounts — never overwrite existing ones so the
+    // user's manually-set initial balance is preserved.
     let bankList = readList<BankAccount>("finance:banks");
     for (const bank of result.banks) {
-      bankList = upsertById(bankList, bank);
+      const exists = bankList.some((existing) => existing.id === bank.id);
+      if (!exists) {
+        bankList = [...bankList, bank];
+      }
     }
     writeList("finance:banks", bankList);
 
