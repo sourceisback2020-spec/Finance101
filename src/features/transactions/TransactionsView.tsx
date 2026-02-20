@@ -254,7 +254,7 @@ export function TransactionsView() {
   const [accountFilter, setAccountFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [fromDate, setFromDate] = useState(IMPORT_CUTOFF_DATE);
-  const [toDate, setToDate] = useState("");
+  const [toDate, setToDate] = useState(localIsoDate());
   const [page, setPage] = useState(0);
   const isEditing = Boolean(form.id);
 
