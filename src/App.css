@@ -299,7 +299,7 @@
 .stack-lg {
   display: flex;
   flex-direction: column;
-  gap: var(--stack-gap, 12px);
+  gap: var(--stack-gap, 10px);
 }
 
 .muted {
@@ -316,18 +316,18 @@
   background: color-mix(in srgb, var(--panel) 86%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-panel);
-  padding: 10px 12px;
+  padding: 8px 10px;
   backdrop-filter: blur(var(--panel-blur));
 }
 
 .kpi-card h3 {
-  margin: 0 0 6px;
+  margin: 0 0 3px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .kpi-card strong {
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .panel {
@@ -477,7 +477,7 @@
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 label {
@@ -500,7 +500,8 @@ select {
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--panel-soft) 74%, var(--bg));
   color: var(--text);
-  padding: 8px 10px;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 textarea {
@@ -508,9 +509,9 @@ textarea {
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--panel-soft) 74%, var(--bg));
   color: var(--text);
-  padding: 8px 10px;
+  padding: 6px 10px;
   resize: vertical;
-  min-height: 104px;
+  min-height: 80px;
 }
 
 button {
@@ -518,8 +519,9 @@ button {
   border: 1px solid var(--border);
   background: var(--panel-soft);
   color: var(--text);
-  padding: 9px 12px;
+  padding: 7px 11px;
   cursor: pointer;
+  font-size: 13px;
   transition: all var(--motion-duration) ease;
 }
 
@@ -606,7 +608,7 @@ button:hover {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .panel-head input {
@@ -643,9 +645,9 @@ table {
 th,
 td {
   text-align: left;
-  padding: 10px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 th {
@@ -737,13 +739,52 @@ tr.row-debit td {
 
 .ai-command-panel {
   margin-bottom: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
+}
+
+.ai-command-panel .panel-head {
+  margin-bottom: 4px;
+}
+
+.ai-command-panel .panel-head h3 {
+  font-size: 13px;
+  margin: 0;
+}
+
+.ai-command-panel p.muted {
+  font-size: 11px;
+  margin: 0 0 4px;
+  line-height: 1.3;
+}
+
+.ai-command-panel label {
+  gap: 3px;
+  font-size: 11px;
 }
 
 .ai-command-panel textarea {
-  min-height: 88px;
-  overflow-y: hidden;
+  min-height: 36px;
+  max-height: 80px;
+  overflow-y: auto;
   resize: none;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.ai-command-panel .row-actions {
+  margin-top: 4px;
+}
+
+.ai-command-panel .row-actions button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.ai-command-panel .chip-btn {
+  padding: 3px 8px;
+  font-size: 10px;
+  min-width: auto;
 }
 
 .switch-row {

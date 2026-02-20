@@ -480,7 +480,7 @@ export function AiCommandBox() {
     const node = textareaRef.current;
     if (!node) return;
     node.style.height = "0px";
-    node.style.height = `${Math.max(76, node.scrollHeight)}px`;
+    node.style.height = `${Math.max(36, Math.min(80, node.scrollHeight))}px`;
   };
 
   const applyCommands = async () => {
@@ -498,7 +498,7 @@ export function AiCommandBox() {
       setInput("");
       const node = textareaRef.current;
       if (node) {
-        node.style.height = "76px";
+        node.style.height = "36px";
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not apply command.");
@@ -518,7 +518,7 @@ export function AiCommandBox() {
         Command Input
         <textarea
           ref={textareaRef}
-          rows={2}
+          rows={1}
           value={input}
           onChange={(event) => {
             setInput(event.target.value);
