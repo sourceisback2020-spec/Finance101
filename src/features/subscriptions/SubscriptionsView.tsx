@@ -22,6 +22,7 @@ import { useChartAnimation } from "../../hooks/useChartAnimation";
 import { CustomTooltip } from "../../ui/charts/ChartTooltip";
 import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
 import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
+import { EmptyState } from "../../ui/EmptyState";
 import { normalizeUploadImage } from "../../ui/images/imageTools";
 
 const initialState: Subscription = {
@@ -181,7 +182,7 @@ export function SubscriptionsView() {
       <article className="panel">
         <h3>Cost by Subscription (Monthly Equivalent)</h3>
         {spendBySubscription.length === 0 ? (
-          <div className="chart-empty">No active subscriptions to visualize.</div>
+          <EmptyState description="No active subscriptions to visualize." />
         ) : (
           <div className="chart-box">
             <ResponsiveContainer width="100%" height={260}>

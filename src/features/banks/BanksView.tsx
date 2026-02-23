@@ -22,6 +22,7 @@ import { useChartAnimation } from "../../hooks/useChartAnimation";
 import { CustomTooltip } from "../../ui/charts/ChartTooltip";
 import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
 import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
+import { EmptyState } from "../../ui/EmptyState";
 import { normalizeUploadImage } from "../../ui/images/imageTools";
 
 const initialState: BankAccount = {
@@ -369,7 +370,7 @@ export function BanksView() {
       <article className="panel">
         <h3>Live Balance by Account</h3>
         {liveByBank.length === 0 ? (
-          <div className="chart-empty">Add bank accounts to visualize account balances.</div>
+          <EmptyState description="Add bank accounts to visualize account balances." />
         ) : (
           <div className="chart-box">
             <ResponsiveContainer width="100%" height={260}>
@@ -404,7 +405,7 @@ export function BanksView() {
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="chart-empty">Need at least 2 different update dates to draw a liquidity timeline.</div>
+          <EmptyState description="Need at least 2 different update dates to draw a liquidity timeline." />
         )}
       </article>
 

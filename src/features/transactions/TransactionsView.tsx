@@ -24,6 +24,7 @@ import { useChartAnimation } from "../../hooks/useChartAnimation";
 import { CustomTooltip } from "../../ui/charts/ChartTooltip";
 import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
 import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
+import { EmptyState } from "../../ui/EmptyState";
 
 type ChartRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 type PrimaryChartMode = "line" | "area" | "candles";
@@ -674,9 +675,9 @@ export function TransactionsView() {
                 </ResponsiveContainer>
               </div>
             ) : primaryChartMode === "candles" ? (
-              <div className="chart-empty">No candlestick buckets in this timeframe yet. Expand range or add transactions.</div>
+              <EmptyState description="No candlestick buckets in this timeframe yet. Expand range or add transactions." />
             ) : (
-              <div className="chart-empty">Add transactions from at least 2 different months to render the trend chart.</div>
+              <EmptyState description="Add transactions from at least 2 different months to render the trend chart." />
             )}
           </div>
           <div className="chart-panel">
@@ -761,9 +762,9 @@ export function TransactionsView() {
                 </ResponsiveContainer>
               </div>
             ) : primaryChartMode === "candles" ? (
-              <div className="chart-empty">No candlestick buckets in this timeframe yet. Expand range or add transactions.</div>
+              <EmptyState description="No candlestick buckets in this timeframe yet. Expand range or add transactions." />
             ) : (
-              <div className="chart-empty">Add at least 2 transactions to visualize running balance movement.</div>
+              <EmptyState description="Add at least 2 transactions to visualize running balance movement." />
             )}
           </div>
         </div>
@@ -775,7 +776,7 @@ export function TransactionsView() {
           <strong>{money(scheduled.reduce((sum, tx) => sum + (tx.type === "income" ? tx.amount : -tx.amount), 0))} pending impact</strong>
         </div>
         {scheduled.length === 0 ? (
-          <div className="chart-empty">No future-dated transactions. Add one to track upcoming paychecks and bills.</div>
+          <EmptyState description="No future-dated transactions. Add one to track upcoming paychecks and bills." />
         ) : (
           <div className="table-wrap">
             <table>
@@ -812,7 +813,7 @@ export function TransactionsView() {
           <strong>Top {heatmapRows.length} categories</strong>
         </div>
         {heatmapRows.length === 0 ? (
-          <div className="chart-empty">No transactions in this filter range yet.</div>
+          <EmptyState description="No transactions in this filter range yet." />
         ) : (
           <div className="table-wrap">
             <table>

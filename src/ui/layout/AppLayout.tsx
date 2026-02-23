@@ -1,4 +1,4 @@
-import { BarChart3, CreditCard, DollarSign, Landmark, Menu, Palette, PiggyBank, Repeat, Sparkles, Target, Wallet } from "lucide-react";
+import { BarChart3, ChevronDown, ChevronUp, CreditCard, DollarSign, Landmark, Menu, Palette, PiggyBank, Repeat, Sparkles, Target, TrendingUp, Wallet } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useAppearance } from "../theme/ThemeContext";
 
@@ -15,24 +15,43 @@ type Props = {
   children: ReactNode;
 };
 
-const nav = [
-  { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-  { id: "transactions", label: "Transactions", icon: DollarSign },
-  { id: "subscriptions", label: "Subscriptions", icon: Repeat },
-  { id: "cards", label: "Credit Cards", icon: CreditCard },
-  { id: "banks", label: "Bank Accounts", icon: PiggyBank },
-  { id: "budgets", label: "Budgets", icon: Wallet },
-  { id: "goals", label: "Goals", icon: Target },
-  { id: "scenarios", label: "What-If Scenarios", icon: Sparkles },
-  { id: "retirement", label: "401k Tracker", icon: Landmark },
-  { id: "customize", label: "Customize UI", icon: Palette }
-] as const;
+type NavItem = { id: AppView; label: string; icon: typeof BarChart3 };
+
+const navSections: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Overview",
+    items: [
+      { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Manage",
+    items: [
+      { id: "transactions", label: "Transactions", icon: DollarSign },
+      { id: "subscriptions", label: "Subscriptions", icon: Repeat },
+      { id: "cards", label: "Credit Cards", icon: CreditCard },
+      { id: "banks", label: "Bank Accounts", icon: PiggyBank },
+      { id: "budgets", label: "Budgets", icon: Wallet },
+    ],
+  },
+  {
+    label: "Plan",
+    items: [
+      { id: "goals", label: "Goals", icon: Target },
+      { id: "scenarios", label: "What-If Scenarios", icon: Sparkles },
+      { id: "retirement", label: "401k Tracker", icon: Landmark },
+    ],
+  },
+];
+
+const flatNav = navSections.flatMap((s) => s.items);
 
 export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onImportBackup, authEmail, onSignOut, children }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const { appearance } = useAppearance();
   const layout = appearance.layout ?? "default";
-  const viewLabel = useMemo(() => nav.find((item) => item.id === view)?.label ?? "Dashboard", [view]);
+  const viewLabel = useMemo(() => [...flatNav, { id: "customize" as const, label: "Customize UI" }].find((item) => item.id === view)?.label ?? "Dashboard", [view]);
 
   const handleChangeView = (nextView: AppView) => {
     onChangeView(nextView);
@@ -47,47 +66,92 @@ export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onI
     <>
       {!isRail && (
         <div className="sidebar-mobile-head">
-          <h1>Local Finance Planner</h1>
+          <div className="sidebar-brand">
+            <TrendingUp size={20} />
+            <h1>Finance101</h1>
+          </div>
           <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
             Close
           </button>
         </div>
       )}
-      {!isTopnav && !isRail && <p className="sidebar-subtitle">A clean desktop hub for your money decisions.</p>}
       {!isTopnav && !isRail && authEmail ? <p className="sidebar-auth">{authEmail}</p> : null}
       <nav>
-        {nav.map((item) => {
-          const Icon = item.icon;
-          return (
+        {isTopnav || isRail ? (
+          /* Flat list for topnav/rail layouts */
+          flatNav.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                className={`nav-item ${view === item.id ? "active" : ""}`}
+                onClick={() => handleChangeView(item.id)}
+                title={isRail ? item.label : undefined}
+              >
+                <Icon size={isRail ? 20 : 16} />
+                {!isRail && <span>{item.label}</span>}
+              </button>
+            );
+          })
+        ) : (
+          /* Grouped nav for sidebar layouts */
+          navSections.map((section) => (
+            <div key={section.label} className="nav-section">
+              <span className="nav-section-label">{section.label}</span>
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    className={`nav-item ${view === item.id ? "active" : ""}`}
+                    onClick={() => handleChangeView(item.id)}
+                  >
+                    <Icon size={16} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))
+        )}
+        {/* Customize always at the bottom */}
+        {!isTopnav && !isRail && (
+          <div className="nav-section nav-section-bottom">
             <button
-              key={item.id}
-              className={`nav-item ${view === item.id ? "active" : ""}`}
-              onClick={() => handleChangeView(item.id)}
-              title={isRail ? item.label : undefined}
+              className={`nav-item ${view === "customize" ? "active" : ""}`}
+              onClick={() => handleChangeView("customize")}
             >
-              <Icon size={isRail ? 20 : 16} />
-              {!isRail && <span>{item.label}</span>}
+              <Palette size={16} />
+              <span>Customize UI</span>
             </button>
-          );
-        })}
+          </div>
+        )}
+        {(isTopnav || isRail) && (
+          <button
+            className={`nav-item ${view === "customize" ? "active" : ""}`}
+            onClick={() => handleChangeView("customize")}
+            title={isRail ? "Customize UI" : undefined}
+          >
+            <Palette size={isRail ? 20 : 16} />
+            {!isRail && <span>Customize UI</span>}
+          </button>
+        )}
       </nav>
       {!isTopnav && !isRail && (
-        <>
-          <button className="export-btn" onClick={onExportBackup}>
-            Export Full Backup
+        <div className="sidebar-footer">
+          <button className="sidebar-actions-toggle" onClick={() => setActionsOpen((o) => !o)}>
+            <span>Actions</span>
+            {actionsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
-          <button className="secondary-btn" onClick={onImportBackup}>
-            Import Full Backup
-          </button>
-          <button className="secondary-btn" onClick={onExportCsv}>
-            Export Transactions CSV
-          </button>
-          {onSignOut ? (
-            <button className="secondary-btn" onClick={onSignOut}>
-              Sign Out
-            </button>
-          ) : null}
-        </>
+          {actionsOpen && (
+            <div className="sidebar-actions">
+              <button className="sidebar-action-btn" onClick={onExportBackup}>Export Backup</button>
+              <button className="sidebar-action-btn" onClick={onImportBackup}>Import Backup</button>
+              <button className="sidebar-action-btn" onClick={onExportCsv}>Export CSV</button>
+              {onSignOut ? <button className="sidebar-action-btn" onClick={onSignOut}>Sign Out</button> : null}
+            </div>
+          )}
+        </div>
       )}
     </>
   );
@@ -124,4 +188,3 @@ export function AppLayout({ view, onChangeView, onExportCsv, onExportBackup, onI
     </div>
   );
 }
-

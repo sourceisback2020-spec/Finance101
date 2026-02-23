@@ -19,6 +19,7 @@ import { useChartAnimation } from "../../hooks/useChartAnimation";
 import { CustomTooltip } from "../../ui/charts/ChartTooltip";
 import { ChartGradientDefs } from "../../ui/charts/ChartGradients";
 import { CustomActiveDot } from "../../ui/charts/CustomActiveDot";
+import { EmptyState } from "../../ui/EmptyState";
 
 const initialState: CreditCard = {
   id: "",
@@ -110,7 +111,7 @@ export function CreditCardsView() {
       <article className="panel">
         <h3>Debt by Card</h3>
         {debtByCard.length === 0 ? (
-          <div className="chart-empty">Add cards to compare balances by account.</div>
+          <EmptyState description="Add cards to compare balances by account." />
         ) : (
           <div className="chart-box">
             <ResponsiveContainer width="100%" height={260}>
@@ -145,7 +146,7 @@ export function CreditCardsView() {
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="chart-empty">Add a card balance above $0 to see debt trend projection.</div>
+          <EmptyState description="Add a card balance above $0 to see debt trend projection." />
         )}
       </article>
 
